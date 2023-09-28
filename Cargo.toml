@@ -1,0 +1,14 @@
+[package]
+name = "payment-settle-accounts"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/jproyo/payment-settle-accounts"
+description = "Payment Engine to settle accounts between users"
+authors = ["Juan Pablo Royo Sales <juanpablo.royo@gmail.com>"]
+
+
+[dependencies]
+csv = "1.1.7"
+serde = { version = "1.0.130", features = ["derive"] }
