@@ -12,3 +12,5 @@ authors = ["Juan Pablo Royo Sales <juanpablo.royo@gmail.com>"]
 [dependencies]
 csv = "1.1.7"
 serde = { version = "1.0.130", features = ["derive"] }
+typed-builder = "0.16"
+thiserror = "1.0.49"

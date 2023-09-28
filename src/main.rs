@@ -9,8 +9,8 @@ fn main() {
     }
 
     let filename = &args[1];
-    let csv_reader = CSVTransactionReader::new(filename);
-    for record in csv_reader.read() {
+    let mut csv_reader = CSVTransactionReader::new(filename);
+    for record in csv_reader.iter() {
         println!("---------------------");
         println!("{:?}", record);
     }

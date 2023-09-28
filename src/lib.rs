@@ -4,4 +4,5 @@ mod engine;
 mod io;
 
 pub use crate::domain::Transaction;
+pub use crate::domain::TransactionType;
 pub use crate::io::CSVTransactionReader;
