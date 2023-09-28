@@ -2,7 +2,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufReader;
 
-use crate::domain::errors::TransactionError;
+use crate::domain::TransactionError;
 use crate::Transaction;
 
 /// CSVTransactionReader is a wrapper around csv::Reader.
