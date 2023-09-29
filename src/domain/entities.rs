@@ -1,5 +1,5 @@
 use std::fmt;
-use std::ops::{AddAssign, Deref, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 
 use serde::{Deserialize, Serialize, Serializer};
 use typed_builder::TypedBuilder;
@@ -28,9 +28,9 @@ pub enum TransactionType {
 }
 
 #[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy, Default, Arbitrary)]
-pub struct CentDollars(i64);
+pub struct CentDenomination(i64);
 
-impl Deref for CentDollars {
+impl Deref for CentDenomination {
     type Target = i64;
 
     fn deref(&self) -> &Self::Target {
@@ -38,33 +38,41 @@ impl Deref for CentDollars {
     }
 }
 
-impl AddAssign for CentDollars {
+impl AddAssign for CentDenomination {
     fn add_assign(&mut self, other: Self) {
         self.0 += other.0;
     }
 }
 
-impl SubAssign for CentDollars {
+impl SubAssign for CentDenomination {
     fn sub_assign(&mut self, other: Self) {
         self.0 -= other.0;
     }
 }
 
-impl Sub for CentDollars {
+impl Sub for CentDenomination {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        CentDollars(self.0 - other.0)
+        CentDenomination(self.0 - other.0)
     }
 }
 
-impl fmt::Debug for CentDollars {
+impl Add for CentDenomination {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self::Output {
+        CentDenomination(self.0 + other.0)
+    }
+}
+
+impl fmt::Debug for CentDenomination {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:.4}", self.as_f64())
     }
 }
 
-impl Serialize for CentDollars {
+impl Serialize for CentDenomination {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -74,8 +82,8 @@ impl Serialize for CentDollars {
     }
 }
 
-impl<'de> Deserialize<'de> for CentDollars {
-    fn deserialize<D>(deserializer: D) -> Result<CentDollars, D::Error>
+impl<'de> Deserialize<'de> for CentDenomination {
+    fn deserialize<D>(deserializer: D) -> Result<CentDenomination, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -88,23 +96,23 @@ impl<'de> Deserialize<'de> for CentDollars {
                 TransactionError::InvalidTransactionAmount(format!("Cannot parse {:?}", s))
             })
             .map_err(serde::de::Error::custom)?;
-        Ok(CentDollars::from_f64(s))
+        Ok(CentDenomination::from_f64(s))
     }
 }
 
-impl CentDollars {
+impl CentDenomination {
     pub fn as_f64(&self) -> f64 {
         self.0 as f64 / 100.0
     }
 
-    pub fn from_f64(s: f64) -> CentDollars {
-        CentDollars((s * 100.0) as i64)
+    pub fn from_f64(s: f64) -> CentDenomination {
+        CentDenomination((s * 100.0) as i64)
     }
 }
 
-impl From<f64> for CentDollars {
-    fn from(s: f64) -> CentDollars {
-        CentDollars::from_f64(s)
+impl From<f64> for CentDenomination {
+    fn from(s: f64) -> CentDenomination {
+        CentDenomination::from_f64(s)
     }
 }
 
@@ -118,8 +126,8 @@ fn is_valid_tx(tx: &Transaction) -> bool {
     true
 }
 
-fn prop_valid_amount() -> impl Strategy<Value = Option<CentDollars>> {
-    proptest::option::of(0.0..1000.0).prop_map(|x| x.map(CentDollars::from))
+fn prop_valid_amount() -> impl Strategy<Value = Option<CentDenomination>> {
+    proptest::option::of(0.0..1000.0).prop_map(|x| x.map(CentDenomination::from))
 }
 
 #[derive(Deserialize, PartialEq, TypedBuilder, Clone, Debug, Arbitrary)]
@@ -137,7 +145,7 @@ pub struct Transaction {
     #[builder(default, setter(strip_option), setter(into))]
     #[serde(rename = "amount")]
     #[proptest(strategy = "prop_valid_amount()")]
-    amount: Option<CentDollars>,
+    amount: Option<CentDenomination>,
 }
 
 impl Transaction {
@@ -153,19 +161,19 @@ impl Transaction {
         self.transaction_id
     }
 
-    pub fn amount(&self) -> Option<CentDollars> {
+    pub fn amount(&self) -> Option<CentDenomination> {
         self.amount
     }
 
-    pub fn amount_or_err(&self, msg: &str) -> Result<CentDollars, TransactionError> {
+    pub fn amount_or_err(&self, msg: &str) -> Result<CentDenomination, TransactionError> {
         self.amount()
             .ok_or_else(|| TransactionError::InvalidTransactionAmount(msg.into()))
     }
 
     fn is_there_previous_dispute(&self, transaction_result: &[Transaction]) -> bool {
-        transaction_result
-            .iter()
-            .any(|t| t.ty() == &TransactionType::Dispute)
+        transaction_result.iter().any(|t| {
+            t.ty() == &TransactionType::Dispute && t.transaction_id() == self.transaction_id()
+        })
     }
 
     pub fn should_process(&self, transaction_result: &[Transaction]) -> bool {
@@ -185,45 +193,64 @@ pub struct TransactionResult {
     #[serde(rename = "client")]
     client_id: ClientId,
     #[builder(default, setter(into))]
-    available: CentDollars,
+    available: CentDenomination,
     #[builder(default, setter(into))]
-    held: CentDollars,
-    #[builder(default, setter(into))]
-    total: CentDollars,
+    held: CentDenomination,
     #[builder(default)]
     locked: bool,
 }
 
 impl TransactionResult {
-    pub fn process(&mut self, transactions: &[Transaction]) -> Result<(), TransactionError> {
-        let mut last_amount_deposit = CentDollars(0);
-        for transaction in transactions {
-            match transaction.ty() {
-                TransactionType::Deposit => {
-                    let amount = transaction.amount_or_err("Deposit amount is missing")?;
-                    self.available += amount;
-                    self.total += amount;
-                    last_amount_deposit = amount;
+    pub fn process(
+        &mut self,
+        transaction: &Transaction,
+        transactions: &[Transaction],
+    ) -> Result<(), TransactionError> {
+        match transaction.ty() {
+            TransactionType::Deposit => {
+                let amount = transaction.amount_or_err("Deposit amount is missing")?;
+                self.available += amount;
+            }
+            TransactionType::Withdrawal => {
+                let amount = transaction.amount_or_err("Withdrawal amount is missing")?;
+                if self.available >= amount {
+                    self.available -= amount;
+                } else {
+                    return Err(TransactionError::InsufficientFunds);
                 }
-                TransactionType::Withdrawal => {
-                    let amount = transaction.amount_or_err("Withdrawal amount is missing")?;
-                    if self.available - amount > CentDollars(0) {
-                        self.available -= amount;
-                        self.total -= amount;
+            }
+            TransactionType::Dispute => {
+                if let Some(deposit) = transactions.iter().find(|t| {
+                    t.ty() == &TransactionType::Deposit
+                        && t.transaction_id() == transaction.transaction_id()
+                }) {
+                    let amount = deposit.amount_or_err("Deposit amount is missing")?;
+                    self.available -= amount;
+                    self.held += amount;
+                }
+            }
+            TransactionType::Resolve => {
+                if transaction.is_there_previous_dispute(transactions) {
+                    if let Some(deposit) = transactions.iter().find(|t| {
+                        t.ty() == &TransactionType::Deposit
+                            && t.transaction_id() == transaction.transaction_id()
+                    }) {
+                        let amount = deposit.amount_or_err("Deposit amount is missing")?;
+                        self.available += amount;
+                        self.held -= amount;
                     }
                 }
-                TransactionType::Dispute => {
-                    self.available -= last_amount_deposit;
-                    self.held += last_amount_deposit;
-                }
-                TransactionType::Resolve => {
-                    self.available += last_amount_deposit;
-                    self.held -= last_amount_deposit;
-                }
-                TransactionType::Chargeback => {
-                    self.held -= last_amount_deposit;
-                    self.total -= last_amount_deposit;
-                    self.locked = true;
+            }
+            TransactionType::Chargeback => {
+                if transaction.is_there_previous_dispute(transactions) {
+                    if let Some(deposit) = transactions.iter().find(|t| {
+                        t.ty() == &TransactionType::Deposit
+                            && t.transaction_id() == transaction.transaction_id()
+                    }) {
+                        let amount = deposit.amount_or_err("Deposit amount is missing")?;
+                        self.held -= amount;
+                        self.locked = true;
+                    }
                 }
             }
         }
@@ -234,16 +261,16 @@ impl TransactionResult {
         self.client_id
     }
 
-    pub fn available(&self) -> CentDollars {
+    pub fn available(&self) -> CentDenomination {
         self.available
     }
 
-    pub fn held(&self) -> CentDollars {
+    pub fn held(&self) -> CentDenomination {
         self.held
     }
 
-    pub fn total(&self) -> CentDollars {
-        self.total
+    pub fn total(&self) -> CentDenomination {
+        self.held + self.available
     }
 
     pub fn locked(&self) -> bool {

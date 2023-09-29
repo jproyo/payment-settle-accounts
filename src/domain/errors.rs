@@ -1,6 +1,6 @@
-use thiserror::Error;
+use std::sync::PoisonError;
 
-use crate::Transaction;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TransactionError {
@@ -15,7 +15,13 @@ pub enum TransactionError {
     #[error("Error parsing CSV file - {0}")]
     CSVError(#[from] csv::Error),
     #[error("Error synchronizing transactions - {0}")]
-    SyncError(#[from] std::sync::PoisonError<std::sync::MutexGuard<'static, Transaction>>),
+    SyncError(String),
     #[error("Infusfficient funds for withdrawal")]
     InsufficientFunds,
+}
+
+impl<T> From<PoisonError<T>> for TransactionError {
+    fn from(value: PoisonError<T>) -> Self {
+        TransactionError::SyncError(value.to_string())
+    }
 }

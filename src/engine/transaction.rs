@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
 
 use crate::domain::ClientId;
 use crate::domain::Transaction;
@@ -11,59 +13,75 @@ use crate::domain::TxId;
 
 pub trait PaymentEngine {
     fn process(&mut self, transaction: &Transaction) -> Result<(), TransactionError>;
-    fn summary(self) -> Vec<TransactionResult>;
+    fn summary(&self) -> Vec<TransactionResult>;
 }
 
-type TxById = HashMap<TxId, Mutex<Vec<Transaction>>>;
-type TxByClientId = HashMap<ClientId, RwLock<TxById>>;
+// This storage will contain Deposit or Dispute transaction to keep track of the client's
+// disputes, resolves, and chargebacks.
+type TxById = HashMap<TxId, RwLock<Vec<Transaction>>>;
+
+/// This storage will contain the current state of the client's account.
+type TxByClientId = HashMap<ClientId, RwLock<TransactionResult>>;
 
 pub struct MemoryPaymentEngine {
-    transactions: Arc<RwLock<TxByClientId>>,
+    tx_state_by_client: Arc<RwLock<TxByClientId>>,
+    tx_by_id: Arc<RwLock<TxById>>,
+}
+
+impl fmt::Debug for MemoryPaymentEngine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MemoryPaymentEngine").finish()
+    }
 }
 
 impl MemoryPaymentEngine {
     pub fn new() -> Self {
         MemoryPaymentEngine {
-            transactions: Arc::new(RwLock::new(HashMap::new())),
+            tx_state_by_client: Arc::new(RwLock::new(HashMap::new())),
+            tx_by_id: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
 
 impl PaymentEngine for MemoryPaymentEngine {
     fn process(&mut self, transaction: &Transaction) -> Result<(), TransactionError> {
-        let mut transactions = self.transactions.write().unwrap();
+        let mut transactions = self.tx_state_by_client.write()?;
         let tx_by_client = transactions
             .entry(transaction.client_id())
-            .or_insert_with(|| RwLock::new(HashMap::new()));
-        let tx_by_client = tx_by_client.get_mut().unwrap();
-        let transaction_result = tx_by_client
-            .entry(transaction.transaction_id())
-            .or_insert_with(|| Mutex::new(vec![]));
-        let mut transaction_result = transaction_result.lock().unwrap();
-        if transaction.should_process(&transaction_result) {
-            transaction_result.push(transaction.clone());
+            .or_insert_with(|| {
+                RwLock::new(
+                    TransactionResult::builder()
+                        .client_id(transaction.client_id())
+                        .build(),
+                )
+            });
+        let tx_by_client = tx_by_client.get_mut()?;
+        {
+            let tx_by_id = self.tx_by_id.read()?;
+            let tx_by_id_txs = tx_by_id.get(&transaction.transaction_id());
+            match tx_by_id_txs {
+                Some(txs) => {
+                    let txs = txs.read()?;
+                    tx_by_client.process(transaction, &txs)?;
+                }
+                None => tx_by_client.process(transaction, &[])?,
+            }
         }
+        let mut tx_by_id = self.tx_by_id.write()?;
+        let tx_by_id = tx_by_id
+            .entry(transaction.transaction_id())
+            .or_insert_with(|| RwLock::new(vec![]));
+        tx_by_id.write()?.push(transaction.clone());
         Ok(())
     }
 
-    fn summary(self) -> Vec<TransactionResult> {
-        let transactions = self.transactions.read().unwrap();
-        transactions.keys().fold(vec![], |mut acc, client_id| {
-            let transaction_result = transactions.get(client_id).unwrap().read().unwrap();
-            let mut result = TransactionResult::builder()
-                .client_id(*client_id)
-                .available(0.0)
-                .held(0.0)
-                .total(0.0)
-                .locked(false)
-                .build();
-            transaction_result.iter().for_each(|(tx_id, txs)| {
-                let txs = txs.lock().unwrap();
-                result.process(txs.as_slice()).unwrap();
-            });
-            acc.push(result);
-            acc
-        })
+    fn summary(&self) -> Vec<TransactionResult> {
+        self.tx_state_by_client
+            .read()
+            .unwrap()
+            .values()
+            .map(|tx| tx.read().unwrap().clone())
+            .collect()
     }
 }
 
@@ -80,14 +98,10 @@ mod tests {
         #[test]
         fn test_memory_payment_engine_process(transactions in any::<Vec<Transaction>>()) {
             let mut engine = MemoryPaymentEngine::new();
-            let len = transactions.len();
             for transaction in transactions {
-                let result = engine.process(&transaction);
-                assert!(result.is_ok());
+                engine.process(&transaction).unwrap();
             }
             let result = engine.summary();
-            println!("{:?}", result);
-            assert!(result.len() <= len);
             for r in result {
                 assert!(r.available().as_f64() >= 0.0);
                 assert!(r.held().as_f64() >= 0.0);

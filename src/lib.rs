@@ -4,4 +4,5 @@ mod engine;
 mod io;
 
 pub use crate::domain::*;
+pub use crate::engine::*;
 pub use crate::io::*;
