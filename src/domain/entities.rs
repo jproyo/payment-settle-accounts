@@ -364,9 +364,39 @@ mod tests {
         let expected = 12.into();
         assert_eq!(transaction_result.available, expected);
     }
-
     #[test]
     fn test_process_withdrawal_with_sufficient_funds() {
+        let deposit = Transaction::builder()
+            .ty(TransactionType::Deposit)
+            .amount(12.0)
+            .transaction_id(1)
+            .client_id(1)
+            .build();
+        let mut transactions = vec![];
+        let mut transaction_result = TransactionResult::builder()
+            .client_id(1)
+            .available(0.0)
+            .held(0.0)
+            .build();
+
+        let result = transaction_result.process(&deposit, &transactions);
+        assert!(result.is_ok());
+        transactions.push(deposit);
+
+        let withdrawal = Transaction::builder()
+            .ty(TransactionType::Withdrawal)
+            .amount(12)
+            .transaction_id(2)
+            .client_id(1)
+            .build();
+
+        let result = transaction_result.process(&withdrawal, &transactions);
+        assert!(result.is_ok());
+        assert_eq!(transaction_result.available, 0.into());
+    }
+
+    #[test]
+    fn test_process_withdrawal_with_insufficient_funds() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
             .amount(12.0)
@@ -502,9 +532,84 @@ mod tests {
         assert_eq!(transaction_result.available(), 12.into());
         assert_eq!(transaction_result.held(), 0.into());
     }
+    #[test]
+    fn test_process_dispute_with_not_enough_available() {
+        let deposit = Transaction::builder()
+            .ty(TransactionType::Deposit)
+            .amount(12.0)
+            .transaction_id(1)
+            .client_id(1)
+            .build();
+        let mut transactions = vec![];
+        let mut transaction_result = TransactionResult::builder()
+            .client_id(1)
+            .available(0.0)
+            .held(0.0)
+            .build();
+
+        let result = transaction_result.process(&deposit, &transactions);
+        assert!(result.is_ok());
+        transactions.push(deposit);
+
+        let withdrawal = Transaction::builder()
+            .ty(TransactionType::Withdrawal)
+            .amount(5)
+            .transaction_id(2)
+            .client_id(1)
+            .build();
+
+        let result = transaction_result.process(&withdrawal, &transactions);
+        assert!(result.is_ok());
+
+        let dispute = Transaction::builder()
+            .ty(TransactionType::Dispute)
+            .transaction_id(1)
+            .client_id(1)
+            .build();
+
+        let result = transaction_result.process(&dispute, &transactions);
+        assert!(result.is_err());
+        assert_eq!(transaction_result.available(), 7.into());
+        assert_eq!(transaction_result.held(), 0.into());
+        match result {
+            Err(TransactionError::InconsistenceBalance(_)) => {}
+            _ => panic!("Unexpected error"),
+        }
+    }
 
     #[test]
     fn test_process_resolve_with_no_dispute() {
+        let deposit = Transaction::builder()
+            .ty(TransactionType::Deposit)
+            .amount(12.0)
+            .transaction_id(1)
+            .client_id(1)
+            .build();
+        let mut transactions = vec![];
+        let mut transaction_result = TransactionResult::builder()
+            .client_id(1)
+            .available(0.0)
+            .held(0.0)
+            .build();
+
+        let result = transaction_result.process(&deposit, &transactions);
+        assert!(result.is_ok());
+        transactions.push(deposit);
+
+        let resolve = Transaction::builder()
+            .ty(TransactionType::Resolve)
+            .transaction_id(1)
+            .client_id(1)
+            .build();
+
+        let result = transaction_result.process(&resolve, &transactions);
+        assert!(result.is_ok());
+        assert_eq!(transaction_result.available(), 12.into());
+        assert_eq!(transaction_result.held(), 0.into());
+    }
+
+    #[test]
+    fn test_process_resolve_with_no_funds() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
             .amount(12.0)
