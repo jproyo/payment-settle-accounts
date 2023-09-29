@@ -21,33 +21,66 @@ type TxById = HashMap<TxId, RwLock<Vec<Transaction>>>;
 /// This storage will contain the current state of the client's account.
 type TxByClientId = HashMap<ClientId, RwLock<TransactionResult>>;
 
-pub struct MemoryPaymentEngine {
+/// A thread-safe payment engine that stores transaction information in memory.
+pub struct MemoryThreadSafePaymentEngine {
     tx_state_by_client: Arc<RwLock<TxByClientId>>,
     tx_by_id: Arc<RwLock<TxById>>,
 }
 
-impl fmt::Debug for MemoryPaymentEngine {
+impl fmt::Debug for MemoryThreadSafePaymentEngine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MemoryPaymentEngine").finish()
     }
 }
 
-impl MemoryPaymentEngine {
+impl MemoryThreadSafePaymentEngine {
+    /// Creates a new `MemoryThreadSafePaymentEngine`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use my_crate::MemoryThreadSafePaymentEngine;
+    ///
+    /// let engine = MemoryThreadSafePaymentEngine::new();
+    /// ```
     pub fn new() -> Self {
-        MemoryPaymentEngine {
+        MemoryThreadSafePaymentEngine {
             tx_state_by_client: Arc::new(RwLock::new(HashMap::new())),
             tx_by_id: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
 
-impl Default for MemoryPaymentEngine {
+impl Default for MemoryThreadSafePaymentEngine {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl PaymentEngine for MemoryPaymentEngine {
+impl PaymentEngine for MemoryThreadSafePaymentEngine {
+    /// Processes the given transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction` - The transaction to be processed.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the transaction is processed successfully,
+    /// otherwise returns a `TransactionError`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use my_crate::{MemoryThreadSafePaymentEngine, Transaction};
+    ///
+    /// let mut engine = MemoryThreadSafePaymentEngine::new();
+    /// let transaction = Transaction::new();
+    ///
+    /// let result = engine.process(&transaction);
+    ///
+    /// assert!(result.is_ok());
+    /// ```
     fn process(&mut self, transaction: &Transaction) -> Result<(), TransactionError> {
         let mut transactions = self.tx_state_by_client.write()?;
         let tx_by_client = transactions
@@ -84,6 +117,30 @@ impl PaymentEngine for MemoryPaymentEngine {
         Ok(())
     }
 
+    /// Returns a summary of the transaction results.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of `TransactionResult` representing the summary
+    /// of transaction results.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use my_crate::{MemoryThreadSafePaymentEngine, TransactionResult};
+    ///
+    /// let engine = MemoryThreadSafePaymentEngine::new();
+    /// ...
+    /// engine.process(tx1);
+    /// engine.process(tx2);
+    /// engine.process(tx3);
+    /// ...
+    /// let summary = engine.summary();
+    /// for result in summary {
+    ///    println!("{:?}", result);
+    ///    // TransactionResult { client_id: 1, available: 0, held: 0, total: 0, locked: false }
+    /// }
+    /// ```
     fn summary(&self) -> Vec<TransactionResult> {
         self.tx_state_by_client
             .read()
@@ -97,6 +154,114 @@ impl PaymentEngine for MemoryPaymentEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::Transaction;
-    use crate::domain::TransactionType;
+    use crate::*;
+
+    #[test]
+    fn test_process_with_existing_tx_by_id() {
+        let mut state = MemoryThreadSafePaymentEngine::new();
+        let client_id = 1;
+        let transaction_id = 1;
+        let transaction = Transaction::builder()
+            .client_id(client_id)
+            .transaction_id(transaction_id)
+            .amount(1.0)
+            .ty(TransactionType::Deposit)
+            .build();
+
+        // Add an existing transaction
+        state
+            .tx_by_id
+            .write()
+            .unwrap()
+            .insert(transaction_id, RwLock::new(vec![transaction.clone()]));
+
+        let result = state.process(&transaction);
+
+        assert!(result.is_ok());
+
+        let tx_by_client = state.tx_state_by_client.read().unwrap();
+        let tx_by_id = state.tx_by_id.read().unwrap();
+
+        assert_eq!(tx_by_client.len(), 1);
+        assert_eq!(tx_by_id.len(), 1);
+        assert_eq!(
+            tx_by_id.get(&transaction_id).unwrap().read().unwrap().len(),
+            2
+        );
+    }
+
+    #[test]
+    fn test_process_with_non_existing_tx_by_id() {
+        let mut state = MemoryThreadSafePaymentEngine::new();
+        let client_id = 1;
+        let transaction_id = 1;
+        let transaction = Transaction::builder()
+            .client_id(client_id)
+            .transaction_id(transaction_id)
+            .amount(1.0)
+            .ty(TransactionType::Deposit)
+            .build();
+
+        let result = state.process(&transaction);
+
+        assert!(result.is_ok());
+
+        let tx_by_client = state.tx_state_by_client.read().unwrap();
+        let tx_by_id = state.tx_by_id.read().unwrap();
+
+        assert_eq!(tx_by_client.len(), 1);
+        assert_eq!(tx_by_id.len(), 1);
+        assert_eq!(
+            tx_by_id.get(&transaction_id).unwrap().read().unwrap().len(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_process_with_should_be_tracked() {
+        let mut state = MemoryThreadSafePaymentEngine::new();
+        let client_id = 1;
+        let transaction_id = 1;
+        let transaction = Transaction::builder()
+            .client_id(client_id)
+            .transaction_id(transaction_id)
+            .amount(1.0)
+            .ty(TransactionType::Deposit)
+            .build();
+
+        let result = state.process(&transaction);
+
+        assert!(result.is_ok());
+
+        let tx_by_id = state.tx_by_id.read().unwrap();
+
+        assert_eq!(tx_by_id.len(), 1);
+        assert_eq!(
+            tx_by_id.get(&transaction_id).unwrap().read().unwrap().len(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_process_with_empty_txs() {
+        let mut state = MemoryThreadSafePaymentEngine::new();
+        let client_id = 1;
+        let transaction_id = 1;
+        let transaction = Transaction::builder()
+            .client_id(client_id)
+            .transaction_id(transaction_id)
+            .amount(1.0)
+            .ty(TransactionType::Resolve)
+            .build();
+
+        let result = state.process(&transaction);
+
+        assert!(result.is_ok());
+
+        let tx_by_client = state.tx_state_by_client.read().unwrap();
+        let tx_by_id = state.tx_by_id.read().unwrap();
+
+        assert_eq!(tx_by_client.len(), 1);
+        assert_eq!(tx_by_id.len(), 0);
+    }
 }

@@ -7,40 +7,43 @@ use serde::Serialize;
 use crate::domain::TransactionError;
 use crate::{CentDenomination, ClientId, Transaction, TransactionResult};
 
-/// CSVTransactionReader is a wrapper around csv::Reader.
+/// `CSVTransactionReader` is a wrapper around `csv::Reader`.
 pub struct CSVTransactionReader {
     reader: csv::Reader<BufReader<File>>,
 }
 
-/// Implement Debug for CSVTransactionReader hiding details
+/// Implement `Debug` for `CSVTransactionReader` hiding details
 impl fmt::Debug for CSVTransactionReader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CSVTransactionReader")
     }
 }
 
-/// CSVReaderIter is a wrapper around csv::DeserializeRecordsIter.
+/// `CSVReaderIter` is a wrapper around `csv::DeserializeRecordsIter`.
 pub struct CSVReaderIter<'a> {
     iter: csv::DeserializeRecordsIter<'a, BufReader<File>, Transaction>,
 }
 
-/// Implement Debug for CSVReaderIter hiding details
+/// Implement Debug for `CSVReaderIter` hiding details
 impl fmt::Debug for CSVReaderIter<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CSVReaderIter")
     }
 }
 
-/// Implement Iterator for CSVReaderIter
+/// Implement `Iterator` for `CSVReaderIter`
 impl Iterator for CSVReaderIter<'_> {
     type Item = Result<Transaction, TransactionError>;
 
+    /// Advances the iterator and returns the next value.
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|r| r.map_err(|e| e.into()))
     }
 }
 
+/// `CSVTransactionReader` has a function to return an iter due to lifetimes.
 impl CSVTransactionReader {
+    /// Returns an iterator over the transactions in the CSV file.
     pub fn iter(&mut self) -> CSVReaderIter<'_> {
         CSVReaderIter {
             iter: self.reader.deserialize(),
@@ -49,6 +52,7 @@ impl CSVTransactionReader {
 }
 
 impl<'a> CSVTransactionReader {
+    /// Creates a new `CSVTransactionReader` with the given filename.
     pub fn new(filename: &'a str) -> Self {
         let file = File::open(filename).unwrap();
         let reader = BufReader::new(file);
@@ -70,6 +74,7 @@ pub struct TransactionResultCSV {
 }
 
 impl From<TransactionResult> for TransactionResultCSV {
+    /// Converts a `TransactionResult` into a `TransactionResultCSV`.
     fn from(result: TransactionResult) -> Self {
         Self {
             client: result.client_id(),
@@ -81,23 +86,27 @@ impl From<TransactionResult> for TransactionResultCSV {
     }
 }
 
+/// `CSVTransactionResultStdoutWriter` is a wrapper around `csv::Writer` using stdout.
 pub struct CSVTransactionResultStdoutWriter {
     writer: csv::Writer<BufWriter<Stdout>>,
 }
 
 impl fmt::Debug for CSVTransactionResultStdoutWriter {
+    /// Formats the value using the given formatter.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CSVTransactionResultStdoutWriter")
     }
 }
 
 impl CSVTransactionResultStdoutWriter {
+    /// Creates a new `CSVTransactionResultStdoutWriter`.
     pub fn new() -> Self {
         Self {
             writer: csv::Writer::from_writer(BufWriter::new(std::io::stdout())),
         }
     }
 
+    /// Writes the transaction result to the CSV writer.
     pub fn write<T>(&mut self, result: T) -> Result<(), TransactionError>
     where
         T: Into<TransactionResultCSV>,
@@ -108,11 +117,11 @@ impl CSVTransactionResultStdoutWriter {
 }
 
 impl Default for CSVTransactionResultStdoutWriter {
+    /// Returns the default `CSVTransactionResultStdoutWriter`.
     fn default() -> Self {
         Self::new()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use crate::TransactionType;

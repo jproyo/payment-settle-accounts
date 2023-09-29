@@ -1,5 +1,6 @@
 use payment_settle_accounts::{
-    CSVTransactionReader, CSVTransactionResultStdoutWriter, MemoryPaymentEngine, PaymentEngine,
+    CSVTransactionReader, CSVTransactionResultStdoutWriter, MemoryThreadSafePaymentEngine,
+    PaymentEngine,
 };
 use std::env;
 
@@ -12,7 +13,7 @@ fn main() {
 
     let filename = &args[1];
     let mut csv_reader = CSVTransactionReader::new(filename);
-    let mut engine = MemoryPaymentEngine::new();
+    let mut engine = MemoryThreadSafePaymentEngine::new();
     for record in csv_reader.iter() {
         engine.process(&record.unwrap()).unwrap();
     }
