@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
 
 use crate::domain::ClientId;
 use crate::domain::Transaction;
@@ -43,6 +41,12 @@ impl MemoryPaymentEngine {
     }
 }
 
+impl Default for MemoryPaymentEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PaymentEngine for MemoryPaymentEngine {
     fn process(&mut self, transaction: &Transaction) -> Result<(), TransactionError> {
         let mut transactions = self.tx_state_by_client.write()?;
@@ -58,6 +62,7 @@ impl PaymentEngine for MemoryPaymentEngine {
                 )
             });
         let tx_by_client = tx_by_client.get_mut()?;
+        // Open a new scope to release the lock on tx_by_client after use it for reading
         {
             let tx_by_id = self.tx_by_id.read()?;
             let tx_by_id_txs = tx_by_id.get(&transaction.transaction_id());
@@ -69,11 +74,13 @@ impl PaymentEngine for MemoryPaymentEngine {
                 None => tx_by_client.process(transaction, &[])?,
             }
         }
-        let mut tx_by_id = self.tx_by_id.write()?;
-        let tx_by_id = tx_by_id
-            .entry(transaction.transaction_id())
-            .or_insert_with(|| RwLock::new(vec![]));
-        tx_by_id.write()?.push(transaction.clone());
+        if transaction.should_be_tracked() {
+            let mut tx_by_id = self.tx_by_id.write()?;
+            let tx_by_id = tx_by_id
+                .entry(transaction.transaction_id())
+                .or_insert_with(|| RwLock::new(vec![]));
+            tx_by_id.write()?.push(transaction.clone());
+        }
         Ok(())
     }
 

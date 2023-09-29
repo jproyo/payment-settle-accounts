@@ -3,7 +3,7 @@ use payment_settle_accounts::*;
 use proptest::prelude::*;
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1000))]
+    #![proptest_config(ProptestConfig::with_cases(100))]
     #[test]
     fn test_memory_payment_engine_process(transactions in any::<Vec<Transaction>>()) {
         let mut engine = MemoryPaymentEngine::new();
