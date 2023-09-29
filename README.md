@@ -155,6 +155,16 @@ The design supports extensibility and maintainability in the following ways:
 - The settlement logic is encapsulated within the `Transaction` type, making it the central place to modify or investigate any issues related to the software.
 - Each module and important function has been thoroughly tested.
 
+### Error Handling
+
+All error handling are based on `thiserror` crate using an enum and relying on `Result` type.
+All the errors are propagated to the `main` function and if an error is match there we panic. This is because errors that allow us to continue like a `Dispute` that does not have a `Deposit` are not returned as an `Err` but as an `Ok`.
+
+### Testing
+
+All the testing are unit test against custom created data either encoded in the test itself or in files under `data` and `tests/data` folders.
+I used to have `proptest` configured with some cases but I removed it because it made less clean the code in `entities` module.
+
 ## Future Work
 This exercise left many opportunities for improving the current solution that could be addressed in future implementations:
 
