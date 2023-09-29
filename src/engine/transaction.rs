@@ -22,6 +22,7 @@ type TxById = HashMap<TxId, RwLock<Vec<Transaction>>>;
 type TxByClientId = HashMap<ClientId, RwLock<TransactionResult>>;
 
 /// A thread-safe payment engine that stores transaction information in memory.
+#[derive(Clone)]
 pub struct MemoryThreadSafePaymentEngine {
     tx_state_by_client: Arc<RwLock<TxByClientId>>,
     tx_by_id: Arc<RwLock<TxById>>,
@@ -153,8 +154,75 @@ impl PaymentEngine for MemoryThreadSafePaymentEngine {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
     use super::*;
     use crate::*;
+
+    #[test]
+    fn test_process() {
+        let memory_engine = MemoryThreadSafePaymentEngine::new();
+
+        // Create multiple threads to simultaneously process transactions
+        let num_threads = 10;
+        let transactions: Vec<Transaction> = vec![
+            Transaction::builder()
+                .client_id(1)
+                .transaction_id(1)
+                .amount(1.0)
+                .ty(TransactionType::Deposit)
+                .build(),
+            Transaction::builder()
+                .client_id(1)
+                .transaction_id(2)
+                .amount(1.0)
+                .ty(TransactionType::Deposit)
+                .build(),
+            Transaction::builder()
+                .client_id(2)
+                .transaction_id(1)
+                .amount(10.0)
+                .ty(TransactionType::Deposit)
+                .build(),
+            Transaction::builder()
+                .client_id(1)
+                .transaction_id(1)
+                .ty(TransactionType::Dispute)
+                .build(),
+            Transaction::builder()
+                .client_id(2)
+                .transaction_id(4)
+                .amount(2)
+                .ty(TransactionType::Withdrawal)
+                .build(),
+            Transaction::builder()
+                .client_id(1)
+                .transaction_id(1)
+                .ty(TransactionType::Chargeback)
+                .build(),
+        ];
+
+        let handles: Vec<_> = (0..num_threads)
+            .map(|_| {
+                let mut memory_engine = memory_engine.clone();
+                let transactions = transactions.clone();
+                thread::spawn(move || {
+                    for transaction in transactions {
+                        // Call the process method from each thread
+                        memory_engine.process(&transaction).unwrap();
+                    }
+                })
+            })
+            .collect();
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let memory_engine_summary = memory_engine.clone().summary();
+        assert_eq!(memory_engine_summary.len(), 2);
+    }
 
     #[test]
     fn test_process_with_existing_tx_by_id() {
