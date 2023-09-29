@@ -15,11 +15,21 @@ fn main() {
     let mut csv_reader = CSVTransactionReader::new(filename);
     let mut engine = MemoryThreadSafePaymentEngine::new();
     for record in csv_reader.iter() {
-        engine.process(&record.unwrap()).unwrap();
+        match engine.process(&record.unwrap()) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("Error processing transaction: {}", e);
+            }
+        }
     }
 
     let mut csv_writer = CSVTransactionResultStdoutWriter::new();
     for record in engine.summary() {
-        csv_writer.write(record).unwrap();
+        match csv_writer.write(record) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("Error writing transaction result: {}", e);
+            }
+        }
     }
 }

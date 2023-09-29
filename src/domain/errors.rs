@@ -2,6 +2,7 @@ use std::sync::PoisonError;
 
 use thiserror::Error;
 
+/// Error type for the transaction processing based on thiserror crate
 #[derive(Error, Debug)]
 pub enum TransactionError {
     #[error("Invalid transaction id {0}")]
