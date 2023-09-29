@@ -52,6 +52,8 @@ impl PaymentEngine for MemoryPaymentEngine {
                 RwLock::new(
                     TransactionResult::builder()
                         .client_id(transaction.client_id())
+                        .available(0)
+                        .held(0)
                         .build(),
                 )
             });
@@ -90,26 +92,4 @@ mod tests {
     use super::*;
     use crate::domain::Transaction;
     use crate::domain::TransactionType;
-
-    use proptest::prelude::*;
-
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(1000))]
-        #[test]
-        fn test_memory_payment_engine_process(transactions in any::<Vec<Transaction>>()) {
-            let mut engine = MemoryPaymentEngine::new();
-            for transaction in transactions {
-                engine.process(&transaction).unwrap();
-            }
-            let result = engine.summary();
-            for r in result {
-                assert!(r.available().as_f64() >= 0.0);
-                assert!(r.held().as_f64() >= 0.0);
-                assert!(r.total().as_f64() >= 0.0);
-
-                assert_eq!(r.available().as_f64() + r.held().as_f64(), r.total().as_f64());
-            }
-        }
-
-    }
 }

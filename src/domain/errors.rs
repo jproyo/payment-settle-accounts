@@ -12,6 +12,8 @@ pub enum TransactionError {
     InvalidTransactionType(String),
     #[error("Invalid transaction amount {0}")]
     InvalidTransactionAmount(String),
+    #[error("Inconsistence Balance amount {0}")]
+    InconsistenceBalance(String),
     #[error("Error parsing CSV file - {0}")]
     CSVError(#[from] csv::Error),
     #[error("Error synchronizing transactions - {0}")]

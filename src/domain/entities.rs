@@ -27,7 +27,7 @@ pub enum TransactionType {
     Chargeback,
 }
 
-#[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy, Default, Arbitrary)]
+#[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy, Arbitrary)]
 pub struct CentDenomination(i64);
 
 impl Deref for CentDenomination {
@@ -116,6 +116,12 @@ impl From<f64> for CentDenomination {
     }
 }
 
+impl From<i64> for CentDenomination {
+    fn from(s: i64) -> CentDenomination {
+        CentDenomination(s * 100)
+    }
+}
+
 pub type ClientId = u16;
 pub type TxId = u32;
 
@@ -175,26 +181,15 @@ impl Transaction {
             t.ty() == &TransactionType::Dispute && t.transaction_id() == self.transaction_id()
         })
     }
-
-    pub fn should_process(&self, transaction_result: &[Transaction]) -> bool {
-        match self.ty() {
-            TransactionType::Dispute => !transaction_result
-                .iter()
-                .any(|t| t.ty() == &TransactionType::Deposit),
-            TransactionType::Resolve => self.is_there_previous_dispute(transaction_result),
-            TransactionType::Chargeback => self.is_there_previous_dispute(transaction_result),
-            _ => true,
-        }
-    }
 }
 
 #[derive(Serialize, PartialEq, TypedBuilder, Clone, Debug)]
 pub struct TransactionResult {
     #[serde(rename = "client")]
     client_id: ClientId,
-    #[builder(default, setter(into))]
+    #[builder(setter(into))]
     available: CentDenomination,
-    #[builder(default, setter(into))]
+    #[builder(setter(into))]
     held: CentDenomination,
     #[builder(default)]
     locked: bool,
@@ -225,8 +220,14 @@ impl TransactionResult {
                         && t.transaction_id() == transaction.transaction_id()
                 }) {
                     let amount = deposit.amount_or_err("Deposit amount is missing")?;
-                    self.available -= amount;
-                    self.held += amount;
+                    if self.available >= amount {
+                        self.available -= amount;
+                        self.held += amount;
+                    } else {
+                        return Err(TransactionError::InconsistenceBalance(
+                            "Attempt to dispute more than available".into(),
+                        ));
+                    }
                 }
             }
             TransactionType::Resolve => {
@@ -236,8 +237,14 @@ impl TransactionResult {
                             && t.transaction_id() == transaction.transaction_id()
                     }) {
                         let amount = deposit.amount_or_err("Deposit amount is missing")?;
-                        self.available += amount;
-                        self.held -= amount;
+                        if self.held >= amount {
+                            self.available += amount;
+                            self.held -= amount;
+                        } else {
+                            return Err(TransactionError::InconsistenceBalance(
+                                "Attempt to resolve more than held".into(),
+                            ));
+                        }
                     }
                 }
             }
@@ -248,8 +255,14 @@ impl TransactionResult {
                             && t.transaction_id() == transaction.transaction_id()
                     }) {
                         let amount = deposit.amount_or_err("Deposit amount is missing")?;
-                        self.held -= amount;
-                        self.locked = true;
+                        if self.held >= amount {
+                            self.held -= amount;
+                            self.locked = true;
+                        } else {
+                            return Err(TransactionError::InconsistenceBalance(
+                                "Attempt to chargeback more than held".into(),
+                            ));
+                        }
                     }
                 }
             }
@@ -276,4 +289,202 @@ impl TransactionResult {
     pub fn locked(&self) -> bool {
         self.locked
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserialize_cent_denomination() {
+        let to_parse = [
+            "\"0.5\"",
+            "\"0.50\"",
+            "\"0.500\"",
+            "\"0.5000\"",
+            "\"12.2333232\"",
+            "\"12.23332\"",
+            "\"12.23\"",
+            "\"12.2\"",
+            "\"0\"",
+            "\"0.0\"",
+            "\"0.00\"",
+            "\"0.000\"",
+            "\"0.0000\"",
+            "\"2131233212\"",
+            "\"2131233\"",
+            "\"1233\"",
+        ];
+        for s in to_parse.iter() {
+            let deserializer = &mut serde_json::Deserializer::from_str(s);
+            let result = CentDenomination::deserialize(deserializer);
+            assert!(result.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_deserialize_cent_denomination_error() {
+        let to_parse = ["\"0.0.\"", "\"0.0.0\"", "\"45.45.45\"", "Not a number"];
+        for s in to_parse.iter() {
+            let deserializer = &mut serde_json::Deserializer::from_str(s);
+            assert!(CentDenomination::deserialize(deserializer).is_err());
+        }
+    }
+
+    #[test]
+    fn test_process_deposit() {
+        let deposit = Transaction::builder()
+            .ty(TransactionType::Deposit)
+            .amount(12.0)
+            .transaction_id(1)
+            .client_id(1)
+            .build();
+        let transactions = vec![];
+        let mut transaction_result = TransactionResult::builder()
+            .client_id(1)
+            .available(0.0)
+            .held(0.0)
+            .build();
+
+        let result = transaction_result.process(&deposit, &transactions);
+
+        assert!(result.is_ok());
+        let expected = 12.into();
+        assert_eq!(transaction_result.available, expected);
+    }
+
+    //    #[test]
+    //    fn test_process_withdrawal_with_sufficient_funds() {
+    //        let mut account = Account::new();
+    //        account.available = 200;
+    //        let transaction = Transaction::new_withdrawal(100);
+    //        let transactions = vec![];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(result, Ok(()));
+    //        assert_eq!(account.available, 100);
+    //    }
+    //
+    //    #[test]
+    //    fn test_process_withdrawal_with_insufficient_funds() {
+    //        let mut account = Account::new();
+    //        account.available = 50;
+    //        let transaction = Transaction::new_withdrawal(100);
+    //        let transactions = vec![];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(result, Err(TransactionError::InsufficientFunds));
+    //        assert_eq!(account.available, 50);
+    //    }
+    //
+    //    #[test]
+    //    fn test_process_dispute_with_valid_deposit() {
+    //        let mut account = Account::new();
+    //        account.available = 100;
+    //        let deposit = Transaction::new_deposit(100);
+    //        let transaction = Transaction::new_dispute(deposit.transaction_id());
+    //        let transactions = vec![deposit];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(result, Ok(()));
+    //        assert_eq!(account.available, 0);
+    //        assert_eq!(account.held, 100);
+    //    }
+    //
+    //    #[test]
+    //    fn test_process_dispute_with_invalid_deposit() {
+    //        let mut account = Account::new();
+    //        account.available = 50;
+    //        let deposit = Transaction::new_deposit(100);
+    //        let transaction = Transaction::new_dispute(deposit.transaction_id());
+    //        let transactions = vec![deposit];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(
+    //            result,
+    //            Err(TransactionError::InconsistenceBalance(
+    //                "Attempt to dispute more than available".into()
+    //            ))
+    //        );
+    //        assert_eq!(account.available, 50);
+    //        assert_eq!(account.held, 0);
+    //    }
+    //
+    //    #[test]
+    //    fn test_process_resolve_with_valid_dispute() {
+    //        let mut account = Account::new();
+    //        account.available = 0;
+    //        account.held = 100;
+    //        let deposit = Transaction::new_deposit(100);
+    //        let dispute = Transaction::new_dispute(deposit.transaction_id());
+    //        let transaction = Transaction::new_resolve(deposit.transaction_id());
+    //        let transactions = vec![deposit, dispute];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(result, Ok(()));
+    //        assert_eq!(account.available, 100);
+    //        assert_eq!(account.held, 0);
+    //    }
+    //
+    //    #[test]
+    //    fn test_process_resolve_with_no_dispute() {
+    //        let mut account = Account::new();
+    //        account.available = 100;
+    //        let deposit = Transaction::new_deposit(100);
+    //        let transaction = Transaction::new_resolve(deposit.transaction_id());
+    //        let transactions = vec![deposit];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(
+    //            result,
+    //            Err(TransactionError::InconsistenceBalance(
+    //                "Attempt to resolve more than held".into()
+    //            ))
+    //        );
+    //        assert_eq!(account.available, 100);
+    //        assert_eq!(account.held, 0);
+    //    }
+    //
+    //    #[test]
+    //    fn test_process_chargeback_with_valid_dispute() {
+    //        let mut account = Account::new();
+    //        account.available = 0;
+    //        account.held = 100;
+    //        let deposit = Transaction::new_deposit(100);
+    //        let dispute = Transaction::new_dispute(deposit.transaction_id());
+    //        let transaction = Transaction::new_chargeback(deposit.transaction_id());
+    //        let transactions = vec![deposit, dispute];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(result, Ok(()));
+    //        assert_eq!(account.held, 0);
+    //        assert_eq!(account.locked, true);
+    //    }
+    //
+    //    #[test]
+    //    fn test_process_chargeback_with_no_dispute() {
+    //        let mut account = Account::new();
+    //        account.available = 100;
+    //        let deposit = Transaction::new_deposit(100);
+    //        let transaction = Transaction::new_chargeback(deposit.transaction_id());
+    //        let transactions = vec![deposit];
+    //
+    //        let result = account.process(&transaction, &transactions);
+    //
+    //        assert_eq!(
+    //            result,
+    //            Err(TransactionError::InconsistenceBalance(
+    //                "Attempt to chargeback more than held".into()
+    //            ))
+    //        );
+    //        assert_eq!(account.available, 100);
+    //        assert_eq!(account.locked, false);
+    //    }
 }
