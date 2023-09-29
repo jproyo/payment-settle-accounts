@@ -1,33 +1,34 @@
 use std::fmt;
 use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 
+use serde::de::Error;
 use serde::{Deserialize, Serialize, Serializer};
 use typed_builder::TypedBuilder;
 
-use super::errors::TransactionError;
-use proptest::prelude::*;
-use proptest_derive::Arbitrary;
+use crate::TransactionError;
 
-#[derive(Deserialize, PartialEq, Debug, Clone, Arbitrary)]
+/// Represents the type of a transaction.
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub enum TransactionType {
+    /// Represents a deposit transaction.
     #[serde(rename = "deposit")]
-    #[proptest(weight = 3)]
     Deposit,
+    /// Represents a withdrawal transaction.
     #[serde(rename = "withdrawal")]
-    #[proptest(weight = 1)]
     Withdrawal,
+    /// Represents a dispute transaction.
     #[serde(rename = "dispute")]
-    #[proptest(weight = 2)]
     Dispute,
+    /// Represents a resolve transaction.
     #[serde(rename = "resolve")]
-    #[proptest(weight = 2)]
     Resolve,
+    /// Represents a chargeback transaction.
     #[serde(rename = "chargeback")]
-    #[proptest(weight = 1)]
     Chargeback,
 }
 
-#[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy, Arbitrary)]
+/// Represents a monetary value in cents denomination to avoid floating point precissions issues.
+#[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy)]
 pub struct CentDenomination(i64);
 
 impl Deref for CentDenomination {
@@ -89,22 +90,24 @@ impl<'de> Deserialize<'de> for CentDenomination {
     {
         let s = String::deserialize(deserializer)
             .map_err(|e| TransactionError::InvalidTransactionAmount(e.to_string()))
-            .map_err(serde::de::Error::custom)?;
+            .map_err(Error::custom)?;
         let s = s
             .parse::<f64>()
             .map_err(|_| {
                 TransactionError::InvalidTransactionAmount(format!("Cannot parse {:?}", s))
             })
-            .map_err(serde::de::Error::custom)?;
+            .map_err(Error::custom)?;
         Ok(CentDenomination::from_f64(s))
     }
 }
 
 impl CentDenomination {
+    /// Returns the value as a `f64` representing the monetary value.
     pub fn as_f64(&self) -> f64 {
         self.0 as f64 / 100.0
     }
 
+    /// Creates a `CentDenomination` from a `f64` value representing the monetary value.
     pub fn from_f64(s: f64) -> CentDenomination {
         CentDenomination((s * 100.0) as i64)
     }
@@ -122,22 +125,14 @@ impl From<i64> for CentDenomination {
     }
 }
 
+/// Represents a client ID.
 pub type ClientId = u16;
+
+/// Represents a transaction ID.
 pub type TxId = u32;
 
-fn is_valid_tx(tx: &Transaction) -> bool {
-    if let TransactionType::Deposit | TransactionType::Withdrawal = tx.ty {
-        return tx.amount.is_some();
-    }
-    true
-}
-
-fn prop_valid_amount() -> impl Strategy<Value = Option<CentDenomination>> {
-    proptest::option::of(0.0..1000.0).prop_map(|x| x.map(CentDenomination::from))
-}
-
-#[derive(Deserialize, PartialEq, TypedBuilder, Clone, Debug, Arbitrary)]
-#[proptest(filter = "is_valid_tx")]
+/// Represents a transaction object.
+#[derive(Deserialize, PartialEq, TypedBuilder, Clone, Debug)]
 pub struct Transaction {
     #[serde(rename = "type")]
     ty: TransactionType,
@@ -150,34 +145,37 @@ pub struct Transaction {
 
     #[builder(default, setter(strip_option), setter(into))]
     #[serde(rename = "amount")]
-    #[proptest(strategy = "prop_valid_amount()")]
     amount: Option<CentDenomination>,
 }
 
 impl Transaction {
+    /// Returns the type of the transaction.
     pub fn ty(&self) -> &TransactionType {
         &self.ty
     }
 
+    /// Returns the client ID associated with the transaction.
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }
 
+    /// Returns the transaction ID.
     pub fn transaction_id(&self) -> u32 {
         self.transaction_id
     }
 
+    /// Returns the amount of the transaction.
     pub fn amount(&self) -> Option<CentDenomination> {
         self.amount
     }
 
+    /// Returns the amount of the transaction or an error if it is missing.
     pub fn amount_or_err(&self, msg: &str) -> Result<CentDenomination, TransactionError> {
         self.amount()
             .ok_or_else(|| TransactionError::InvalidTransactionAmount(msg.into()))
     }
 
-    /// We only track deposits and disputes because we don't need to track the rest to check if the
-    /// transaction already exists and ther is a dispute or deposit for it.
+    /// Checks if the transaction should be tracked.
     pub fn should_be_tracked(&self) -> bool {
         matches!(
             self.ty(),
@@ -185,18 +183,20 @@ impl Transaction {
         )
     }
 
+    /// Checks if there is a previous dispute for the transaction.
     fn is_there_previous_dispute(&self, transaction_result: &[Transaction]) -> bool {
         transaction_result.iter().any(|t| {
             t.ty() == &TransactionType::Dispute && t.transaction_id() == self.transaction_id()
         })
     }
 
+    /// Finds the previous deposit transaction for the given transaction.
     fn find_previous_deposit<'a, 'b>(
         &'a self,
         transaction_result: &'b [Transaction],
     ) -> Option<&Transaction>
     where
-        'b: 'a,
+        'b: 'a, // 'b lives longer than 'a
     {
         transaction_result.iter().find(|t| {
             t.ty() == &TransactionType::Deposit && t.transaction_id() == self.transaction_id()
@@ -204,6 +204,7 @@ impl Transaction {
     }
 }
 
+/// Represents the result of a transaction.
 #[derive(PartialEq, TypedBuilder, Clone, Debug)]
 pub struct TransactionResult {
     client_id: ClientId,
@@ -216,6 +217,7 @@ pub struct TransactionResult {
 }
 
 impl TransactionResult {
+    /// Processes a transaction and updates the transaction result accordingly.
     pub fn process(
         &mut self,
         transaction: &Transaction,
@@ -281,27 +283,31 @@ impl TransactionResult {
         Ok(())
     }
 
+    /// Returns the client ID associated with the transaction result.
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }
 
+    /// Returns the available amount in the transaction result.
     pub fn available(&self) -> CentDenomination {
         self.available
     }
 
+    /// Returns the held amount in the transaction result.
     pub fn held(&self) -> CentDenomination {
         self.held
     }
 
+    /// Returns the total amount in the transaction result.
     pub fn total(&self) -> CentDenomination {
         self.held + self.available
     }
 
+    /// Checks if the transaction result is locked.
     pub fn locked(&self) -> bool {
         self.locked
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
