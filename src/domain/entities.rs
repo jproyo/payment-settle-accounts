@@ -204,9 +204,8 @@ impl Transaction {
     }
 }
 
-#[derive(Serialize, PartialEq, TypedBuilder, Clone, Debug)]
+#[derive(PartialEq, TypedBuilder, Clone, Debug)]
 pub struct TransactionResult {
-    #[serde(rename = "client")]
     client_id: ClientId,
     #[builder(setter(into))]
     available: CentDenomination,

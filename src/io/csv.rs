@@ -1,9 +1,11 @@
 use std::fmt;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, BufWriter, Stdout};
+
+use serde::Serialize;
 
 use crate::domain::TransactionError;
-use crate::Transaction;
+use crate::{CentDenomination, ClientId, Transaction, TransactionResult};
 
 /// CSVTransactionReader is a wrapper around csv::Reader.
 pub struct CSVTransactionReader {
@@ -55,6 +57,59 @@ impl<'a> CSVTransactionReader {
             .trim(csv::Trim::All)
             .from_reader(reader);
         CSVTransactionReader { reader: rdr }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct TransactionResultCSV {
+    client: ClientId,
+    available: CentDenomination,
+    held: CentDenomination,
+    total: CentDenomination,
+    locked: bool,
+}
+
+impl From<TransactionResult> for TransactionResultCSV {
+    fn from(result: TransactionResult) -> Self {
+        Self {
+            client: result.client_id(),
+            available: result.available(),
+            held: result.held(),
+            total: result.total(),
+            locked: result.locked(),
+        }
+    }
+}
+
+pub struct CSVTransactionResultStdoutWriter {
+    writer: csv::Writer<BufWriter<Stdout>>,
+}
+
+impl fmt::Debug for CSVTransactionResultStdoutWriter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CSVTransactionResultStdoutWriter")
+    }
+}
+
+impl CSVTransactionResultStdoutWriter {
+    pub fn new() -> Self {
+        Self {
+            writer: csv::Writer::from_writer(BufWriter::new(std::io::stdout())),
+        }
+    }
+
+    pub fn write<T>(&mut self, result: T) -> Result<(), TransactionError>
+    where
+        T: Into<TransactionResultCSV>,
+    {
+        self.writer.serialize(result.into())?;
+        Ok(())
+    }
+}
+
+impl Default for CSVTransactionResultStdoutWriter {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
