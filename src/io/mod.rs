@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::{automock, predicate::*};
+
 mod csv;
 
 pub use csv::CSVTransactionReader;
@@ -27,6 +30,7 @@ impl Source for CSVTransactionReader {
     }
 }
 
+#[cfg_attr(test, automock)]
 pub trait Sink {
     fn write(&mut self, record: TransactionResult) -> Result<(), TransactionError>;
 }

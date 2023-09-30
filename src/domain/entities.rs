@@ -1,6 +1,9 @@
 use std::fmt;
 use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 
+#[cfg(test)]
+use fake::Dummy;
+
 use serde::de::Error;
 use serde::{Deserialize, Serialize, Serializer};
 use typed_builder::TypedBuilder;
@@ -9,6 +12,7 @@ use crate::TransactionError;
 
 /// Represents the type of a transaction.
 #[derive(Deserialize, PartialEq, Debug, Clone)]
+#[cfg_attr(test, derive(Dummy))]
 pub enum TransactionType {
     /// Represents a deposit transaction.
     #[serde(rename = "deposit")]
@@ -29,6 +33,7 @@ pub enum TransactionType {
 
 /// Represents a monetary value in cents denomination to avoid floating point precissions issues.
 #[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy)]
+#[cfg_attr(test, derive(Dummy))]
 pub struct CentDenomination(i64);
 
 impl Deref for CentDenomination {
@@ -133,6 +138,7 @@ pub type TxId = u32;
 
 /// Represents a transaction object.
 #[derive(Deserialize, PartialEq, TypedBuilder, Clone, Debug)]
+#[cfg_attr(test, derive(Dummy))]
 pub struct Transaction {
     #[serde(rename = "type")]
     ty: TransactionType,
@@ -206,6 +212,7 @@ impl Transaction {
 
 /// Represents the result of a transaction.
 #[derive(PartialEq, TypedBuilder, Clone, Debug)]
+#[cfg_attr(test, derive(Dummy))]
 pub struct TransactionResult {
     client_id: ClientId,
     #[builder(setter(into))]

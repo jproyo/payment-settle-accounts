@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::{automock, predicate::*};
+
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -11,6 +14,7 @@ use crate::domain::TxId;
 
 /// Trait representing a payment engine. `PaymentEngine` is responsible for processing transactions
 /// one by one and keeping track of them in a `TransactionResult` per Client Account.
+#[cfg_attr(test, automock)]
 pub trait PaymentEngine {
     /// Process a transaction using the payment engine.
     ///
