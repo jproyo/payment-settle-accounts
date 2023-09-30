@@ -1,3 +1,48 @@
+//! This module contains the definition of the pipeline trait and its implementations for running a
+//! program that reads transactions from some `Source`, process them with some `PaymentEngine`, and
+//! writes to some `Sink`.
+//!
+//!
+//! Example of composing Pipeline and TransactionPipeline for future implementations like TCPSource and TCPSink.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use std::net::{TcpStream, TcpListener};
+//! use std::io::{BufReader, BufWriter};
+//! use std::thread;
+//!
+//! // Define TCPSource struct implementing Pipeline trait
+//! struct TCPSource {
+//!     stream: TcpStream,
+//! }
+//!
+//! impl Pipeline for TCPSource {
+//!     fn run(&mut self) -> Result<(), TransactionError> {
+//!         // Implement TCPSource pipeline logic here
+//!         Ok(())
+//!     }
+//! }
+//!
+//! // Define TCPSink struct implementing Pipeline trait
+//! struct TCPSink {
+//!     listener: TcpListener,
+//! }
+//!
+//! impl Pipeline for TCPSink {
+//!     fn run(&mut self) -> Result<(), TransactionError> {
+//!         // Implement TCPSink pipeline logic here
+//!         Ok(())
+//!     }
+//! }
+//!
+//! // Compose TransactionPipeline with TCPSource and TCPSink
+//! let pipeline: Box<dyn Pipeline> = Box::new(TransactionPipeline {
+//!     source: TCPSource { stream: TcpStream::connect("127.0.0.1:8080").unwrap() },
+//!     filter: MemoryThreadSafePaymentEngine::new(),
+//!     sink: TCPSink { listener: TcpListener::bind("127.0.0.1:8081").unwrap() },
+//! });
+//! ```
 use crate::{
     CSVTransactionReader, CSVTransactionResultStdoutWriter, MemoryThreadSafePaymentEngine,
     PaymentEngine, Sink, Source, TransactionError,

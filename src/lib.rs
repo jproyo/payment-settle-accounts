@@ -2,7 +2,7 @@
 mod domain;
 mod engine;
 mod io;
-mod program;
+pub mod program;
 
 pub use crate::domain::*;
 pub use crate::engine::*;

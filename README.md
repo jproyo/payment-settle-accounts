@@ -97,20 +97,23 @@ The following sequence diagrams outline the main flows of the system:
 ```mermaid
 sequenceDiagram
     actor U as User
+    participant PP as Pipeline
     participant CR as CSVReader
     participant ME as MemoryThreadSafePaymentEngine
     participant CW as CSVWriter
-    U ->> CR: read_file
-    activate CR
+    U ->> PP: run
+    PP ->> CR: read
+    activate PP
     loop for each transaction record
-        CR ->> ME: process(tx)
+        PP ->> ME: process(tx)
     end
-    deactivate CR
-    activate CW
+    deactivate PP
+    PP ->> ME: summary()
+    activate PP
     loop for each result
-        CR ->> STDOUT: write(result)
+        PP ->> CW: write(result)
     end
-    deactivate CW
+    deactivate PP
 ```
 
 2. Process Transaction
@@ -134,15 +137,17 @@ sequenceDiagram
 ### Assumptions
 Here are some of the assumptions that were made during the development of this software:
 
-- AS_1: **Transaction IDs** are not globally unique. What makes a transaction unique is the combination of the **Transaction ID and Client ID**. It is assumed that **Transaction IDs** can be repeated among Clients. To accommodate this, the `MemoryThreadSafePaymentEngine` implementation includes special storage in memory to track transactions by Client.
+- AS_1: **Thread Safe**: Although the program is not processing transactions concurrently, which could have been ideally based on the fact that the transactions can be split among threads, all the processing is protected by Thread Safe Types to enable the program be run in a concurrent context.
 
-- AS_2: **Amounts are in Cent denomination**. This is a well known technique in Financial system for handling precision. Because of this there is a special type called `CentDenomiation`, that makes all the automatic and implicit conversions.
+- AS_2: **Transaction IDs** are not globally unique. What makes a transaction unique is the combination of the **Transaction ID and Client ID**. It is assumed that **Transaction IDs** can be repeated among Clients. To accommodate this, the `MemoryThreadSafePaymentEngine` implementation includes special storage in memory to track transactions by Client.
 
-- AS_3: **Amounts in Cent denomination are not going to overflow i64**. This assumptions is for simplicity.
+- AS_3: **Amounts are in Cent denomination**. This is a well known technique in Financial system for handling precision. Because of this there is a special type called `CentDenomiation`, that makes all the automatic and implicit conversions.
 
-- AS_4: Although it would be ideal to split transactions into chunks and process them in different threads, for simplicity and to focus on the account settlement problem, this approach was not taken. However, the only implementation of `PaymentEngine` provided is thread-safe, allowing it to be used across multiple threads. There is a test within `engine::transactions` that verifies this behavior.
+- AS_4: **Amounts in Cent denomination are not going to overflow i64**. This assumptions is for simplicity.
 
-- AS_5: It is assumed that the following errors would stop the program rather than continuing to process transactions, as these indicate incorrect sets of transactions that need verification:
+- AS_5: Although it would be ideal to split transactions into chunks and process them in different threads, for simplicity and to focus on the account settlement problem, this approach was not taken. However, the only implementation of `PaymentEngine` provided is thread-safe, allowing it to be used across multiple threads. There is a test within `engine::transactions` that verifies this behavior.
+
+- AS_6: It is assumed that the following errors would stop the program rather than continuing to process transactions, as these indicate incorrect sets of transactions that need verification:
 
     - **Insufficient Funds**: If a withdrawal is requested without sufficient balance.
     - **Inconsistencies in Balance**: This error may occur if, for example, there is a deposit of 10, followed by a withdrawal of 5, and then a dispute of the initial 10. This would result in an error because the deposit cannot be claimed. This assumption is made because it is not specified in the original problem.
@@ -150,13 +155,17 @@ Here are some of the assumptions that were made during the development of this s
     - Any other unexpected errors.
     - **Overflow in numbers** is not controlled, as we rely on the runtime system and compiler to handle this.
 
-- AS_6: No logging or observability mechanisms are implemented to simplify development and rely on testing.
+- AS_7: No logging or observability mechanisms are implemented to simplify development and rely on testing.
 
 ###  Extensibility and Maintainability
 The design supports extensibility and maintainability in the following ways:
 
+- Program Pipeline Module `program`, is a module that represent who the different pieces can be composed and structured independently of the implementation. In this example we are showing a single implementation based on CSV reader, writer, and Memory Thread Safe transaction processing. But it is clear to the reader of that module that this module allows extensibility, keeping the main logic of the program intact. In the future we can implement a `TCPReader` and `TCPWriter` and compose using the same `Pipeline::run` program. You can check documentation [here](doc/payment-settle-accounts/program/index.html).
+
 - All processing is based on the `PaymentEngine` trait, allowing for future implementations with different semantics, such as using Kafka and a database for storage and messaging.
+
 - The settlement logic is encapsulated within the `Transaction` type, making it the central place to modify or investigate any issues related to the software.
+
 - Each module and important function has been thoroughly tested.
 
 ### Error Handling
