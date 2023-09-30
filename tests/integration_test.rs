@@ -7,7 +7,7 @@ fn test_process_with_correct_results() {
     for record in csv_reader.iter() {
         engine.process(&record.unwrap()).unwrap();
     }
-    let result = engine.summary();
+    let result = engine.summary().unwrap().collect::<Vec<_>>();
     assert_eq!(result.len(), 2);
 
     let expected = TransactionResult::builder()
@@ -29,7 +29,7 @@ fn test_process_with_correct_results_with_chargebacks() {
     for record in csv_reader.iter() {
         engine.process(&record.unwrap()).unwrap();
     }
-    let result = engine.summary();
+    let result = engine.summary().unwrap().collect::<Vec<_>>();
     assert_eq!(result.len(), 2);
 
     let expected = TransactionResult::builder()

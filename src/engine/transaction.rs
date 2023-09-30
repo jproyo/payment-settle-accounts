@@ -9,9 +9,27 @@ use crate::domain::TransactionError;
 use crate::domain::TransactionResult;
 use crate::domain::TxId;
 
+/// Trait representing a payment engine. `PaymentEngine` is responsible for processing transactions
+/// one by one and keeping track of them in a `TransactionResult` per Client Account.
 pub trait PaymentEngine {
+    /// Process a transaction using the payment engine.
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction` - A reference to the transaction to be processed.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the transaction was processed successfully, or an `Err` containing
+    /// a `TransactionError` if an error occurred during processing.
     fn process(&mut self, transaction: &Transaction) -> Result<(), TransactionError>;
-    fn summary(&self) -> Vec<TransactionResult>;
+
+    /// Get a summary of the processed transactions.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Iterator` of `TransactionResult` if there was no error representing the summary of the processed transactions.
+    fn summary(&self) -> Result<Box<dyn Iterator<Item = TransactionResult>>, TransactionError>;
 }
 
 // This storage will contain Deposit or Dispute transaction to keep track of the client's
@@ -22,6 +40,8 @@ type TxById = HashMap<TxId, RwLock<Vec<Transaction>>>;
 type TxByClientId = HashMap<ClientId, RwLock<TransactionResult>>;
 
 /// A thread-safe payment engine that stores transaction information in memory.
+/// State is protected by a `RwLock` to allow concurrent reads and exclusive writes in order
+/// to speed up the processing of transactions.
 #[derive(Clone)]
 pub struct MemoryThreadSafePaymentEngine {
     tx_state_by_client: Arc<RwLock<TxByClientId>>,
@@ -136,19 +156,20 @@ impl PaymentEngine for MemoryThreadSafePaymentEngine {
     /// engine.process(tx2);
     /// engine.process(tx3);
     /// ...
-    /// let summary = engine.summary();
+    /// let summary = engine.summary()?;
     /// for result in summary {
     ///    println!("{:?}", result);
     ///    // TransactionResult { client_id: 1, available: 0, held: 0, total: 0, locked: false }
     /// }
     /// ```
-    fn summary(&self) -> Vec<TransactionResult> {
-        self.tx_state_by_client
-            .read()
-            .unwrap()
+    fn summary(&self) -> Result<Box<dyn Iterator<Item = TransactionResult>>, TransactionError> {
+        let iter: Vec<TransactionResult> = self
+            .tx_state_by_client
+            .read()?
             .values()
             .map(|tx| tx.read().unwrap().clone())
-            .collect()
+            .collect();
+        Ok(Box::new(iter.into_iter()))
     }
 }
 
@@ -220,8 +241,8 @@ mod tests {
             handle.join().unwrap();
         }
 
-        let memory_engine_summary = memory_engine.clone().summary();
-        assert_eq!(memory_engine_summary.len(), 2);
+        let memory_engine_summary = memory_engine.clone().summary().unwrap();
+        assert_eq!(memory_engine_summary.collect::<Vec<_>>().len(), 2);
     }
 
     #[test]
