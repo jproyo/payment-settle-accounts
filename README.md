@@ -9,8 +9,13 @@ In this section, I will explore a minimalistic implementation of a Payment Engin
 - [Building the Project](#building-the-project)
 - [Running the Program](#running-the-program)
 - [Design Documentation](#design-documentation)
+    - [Design Principles](#design-principles)
+    - [Modules](#modules)
+    - [Diagrams](#diagrams)
     - [Assumptions](#assumptions)
     - [Extensibility and Maintainability](#extensibility-and-maintainability)
+    - [Error Handling](#error-handling)
+    - [Testing](#testing)
 - [Future Work](#future-work)
 - [Conclusions](#conclusions)
 
@@ -97,20 +102,7 @@ In this section, I will describe all the assumptions, decisions, and pending imp
 - `engine`: Module that contains Transaction Processors Engines. Only trait definition
 - `engine::memory`: Module that contains Implementation of Transaction processing based on memory
 
-### Diagrams and Design
-
-#### General Design
-
-```mermaid
-graph TD;
-    FILE-->io::csv;
-    io::csv-->engine::memory;
-    engine::memory>domain::entities;
-    io::csv-->engine::memory;
-    io::csv-->STDOUT;
-```
-
-This high-level overview illustrates how different components interact within the system. The diagram comprises three main modules:
+### Diagrams
 
 #### Sequence Diagram
 The following sequence diagrams outline the main flows of the system:
