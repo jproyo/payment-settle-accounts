@@ -9,6 +9,8 @@ In this section, I will explore a minimalistic implementation of a Payment Engin
 - [Building the Project](#building-the-project)
 - [Running the Program](#running-the-program)
 - [Design Documentation](#design-documentation)
+    - [Assumptions](#assumptions)
+    - [Extensibility and Maintainability](#extensibility-and-maintainability)
 - [Future Work](#future-work)
 - [Conclusions](#conclusions)
 
@@ -30,6 +32,8 @@ There are 2 options for building this project:
 
 - Ensure you have both the Docker Server and Client version 24+ installed.
 
+---
+
 ## Building the Project
 
 To build the project, run the following commands:
@@ -45,6 +49,8 @@ To build the project, run the following commands:
 ```shell
 > docker build -t payments .
 ```
+
+---
 
 ## Running the Program
 The main program reads data from a **CSV** file and writes the results to **stdout**.
@@ -67,8 +73,29 @@ When using **Docker**, you need to mount your local disk as a volume. If your **
 > docker run -v /home/your_user/data/my_csv.csv:/app/data payments /app/data/my_csv.csv
 ```
 
+---
+
 ## Design Documentation
 In this section, I will describe all the assumptions, decisions, and pending improvements that led to the current state of this software.
+
+### Design Principles
+
+- **P1: Extensible**: Fundaments of this can be found in [Extensibility](#extensibility-and-maintainability) section.
+- **P2: Single Responsibility**: Each module and Type has a single responsibility.
+- **P3: Composable**: `program` module is designed with the principle in mind that you can compose different `Source`, `PaymentEngine` and `Sink` implementations. Also **P2** enables this principle.
+- **P4: Testability**: Splitting different parts of the logic as exposed before, allows to test both each piece isolated and all integrated togheter. This is enable by **P2** as well.
+- **P5: Thread Safe**: Critical parts are encoded using Thread Safe types.
+
+### Modules
+
+- `program`: This module contains the definition of the pipeline trait and its implementations for running a program that reads transactions from some `Source`, process them with some `PaymentEngine`, and writes to some `Sink`.
+- `io`: This module contains the definition of implementation types for `Source` and `Sink`
+- `io::csv`: Submodule that contains implementation types for dealing with CSV files as a source and destination.
+- `domain`: Module that describe domain entities and errors.
+- `domain::entities`: Module that contains main entities such as `Transaction`, `TransactionResult`, etc.
+- `domain::errors`: Although there is only 1 enum type for the whole errors, this module was conceived separated for future extensions and implementations.
+- `engine`: Module that contains Transaction Processors Engines. Only trait definition
+- `engine::memory`: Module that contains Implementation of Transaction processing based on memory
 
 ### Diagrams and Design
 
@@ -77,17 +104,13 @@ In this section, I will describe all the assumptions, decisions, and pending imp
 ```mermaid
 graph TD;
     FILE-->io::csv;
-    io::csv-->engine::transactions;
-    engine::transactions-->domain::entities;
-    io::csv-->engine::transactions;
+    io::csv-->engine::memory;
+    engine::memory>domain::entities;
+    io::csv-->engine::memory;
     io::csv-->STDOUT;
 ```
 
 This high-level overview illustrates how different components interact within the system. The diagram comprises three main modules:
-
-- `io::csv`: This module contains all the types responsible for interacting with the input FILE for reading the CSV and writing to the standard output. This module sends each record to the `engine::transactions` for processing and collects the results to send to STDOUT.
-- `engine::transactions`: The engine processes each transaction sent by `io::csv` and interacts with the domain to keep track of changes, validating them as necessary.
-- `domain::entities`: This module contains all the types used to represent `Transaction` and `TransactionResult`, facilitating the settling of user accounts.
 
 #### Sequence Diagram
 The following sequence diagrams outline the main flows of the system:
@@ -134,7 +157,8 @@ sequenceDiagram
     deactivate ME
 ```
 
-### Assumptions
+### Assumptions
+
 Here are some of the assumptions that were made during the development of this software:
 
 - AS_1: **Thread Safe**: Although the program is not processing transactions concurrently, which could have been ideally based on the fact that the transactions can be split among threads, all the processing is protected by Thread Safe Types to enable the program be run in a concurrent context.
@@ -145,7 +169,7 @@ Here are some of the assumptions that were made during the development of this s
 
 - AS_4: **Amounts in Cent denomination are not going to overflow i64**. This assumptions is for simplicity.
 
-- AS_5: Although it would be ideal to split transactions into chunks and process them in different threads, for simplicity and to focus on the account settlement problem, this approach was not taken. However, the only implementation of `PaymentEngine` provided is thread-safe, allowing it to be used across multiple threads. There is a test within `engine::transactions` that verifies this behavior.
+- AS_5: Although it would be ideal to split transactions into chunks and process them in different threads, for simplicity and to focus on the account settlement problem, this approach was not taken. However, the only implementation of `PaymentEngine` provided is thread-safe, allowing it to be used across multiple threads. There is a test within `engine::memory` that verifies this behavior.
 
 - AS_6: It is assumed that the following errors would stop the program rather than continuing to process transactions, as these indicate incorrect sets of transactions that need verification:
 
@@ -157,7 +181,8 @@ Here are some of the assumptions that were made during the development of this s
 
 - AS_7: No logging or observability mechanisms are implemented to simplify development and rely on testing.
 
-###  Extensibility and Maintainability
+### Extensibility and Maintainability
+
 The design supports extensibility and maintainability in the following ways:
 
 - Program Pipeline Module `program`, is a module that represent who the different pieces can be composed and structured independently of the implementation. In this example we are showing a single implementation based on CSV reader, writer, and Memory Thread Safe transaction processing. But it is clear to the reader of that module that this module allows extensibility, keeping the main logic of the program intact. In the future we can implement a `TCPReader` and `TCPWriter` and compose using the same `Pipeline::run` program. You can check documentation [here](doc/payment-settle-accounts/program/index.html).
@@ -167,6 +192,47 @@ The design supports extensibility and maintainability in the following ways:
 - The settlement logic is encapsulated within the `Transaction` type, making it the central place to modify or investigate any issues related to the software.
 
 - Each module and important function has been thoroughly tested.
+
+#### Example of Extending Transaction Pipeline Processor
+
+This example can be found [here](doc/payment-settle-accounts/program/index.html).
+
+```rust
+use std::net::{TcpStream, TcpListener};
+use std::io::{BufReader, BufWriter};
+use std::thread;
+
+// Define TCPSource struct implementing Pipeline trait
+struct TCPSource {
+    stream: TcpStream,
+}
+
+impl Pipeline for TCPSource {
+    fn run(&mut self) -> Result<(), TransactionError> {
+        // Implement TCPSource pipeline logic here
+        Ok(())
+    }
+}
+
+// Define TCPSink struct implementing Pipeline trait
+struct TCPSink {
+    listener: TcpListener,
+}
+
+impl Pipeline for TCPSink {
+    fn run(&mut self) -> Result<(), TransactionError> {
+        // Implement TCPSink pipeline logic here
+        Ok(())
+    }
+}
+
+// Compose TransactionPipeline with TCPSource and TCPSink
+let pipeline: Box<dyn Pipeline> = Box::new(TransactionPipeline {
+    source: TCPSource { stream: TcpStream::connect("127.0.0.1:8080").unwrap() },
+    filter: MemoryThreadSafePaymentEngine::new(),
+    sink: TCPSink { listener: TcpListener::bind("127.0.0.1:8081").unwrap() },
+});
+```
 
 ### Error Handling
 
@@ -178,13 +244,16 @@ All the errors are propagated to the `main` function and if an error is match th
 All the testing are unit test against custom created data either encoded in the test itself or in files under `data` and `tests/data` folders.
 I used to have `proptest` configured with some cases but I removed it because it made less clean the code in `entities` module.
 
+---
+
 ## Future Work
 This exercise left many opportunities for improving the current solution that could be addressed in future implementations:
 
 - Implement logging and observability.
 - Implement partitioning and multithreading to process transactions concurrently in chunks.
-- Introduce a Manager to extract the logic from main.rs, allowing for different combinations of sources -> engine -> destination.
 - Implement different `PaymentEngine` implementations to reduce reliance on in-memory storage.
+
+---
 
 ## Conclusions
 Having worked on various highly distributed and transactional systems, it's fascinating how seemingly simple problems like these can still be challenging due to their sensitive nature. Despite this, it's remarkable how Rust facilitates the development of safe and secure solutions in a relatively short amount of time, with minimal external dependencies.

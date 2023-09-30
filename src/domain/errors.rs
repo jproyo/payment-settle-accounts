@@ -1,3 +1,4 @@
+// Error type for the transaction processing
 use std::sync::PoisonError;
 
 use thiserror::Error;

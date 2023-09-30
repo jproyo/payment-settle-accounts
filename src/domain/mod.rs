@@ -1,3 +1,4 @@
+//! Module that describe domain entities and errors.
 mod entities;
 mod errors;
 

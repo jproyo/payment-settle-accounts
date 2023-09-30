@@ -1,3 +1,5 @@
+//! This module contains the definition of implementation types for `Source` and `Sink`, in
+//! particular for dealing with CSV files as a source and destination.
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Stdout};

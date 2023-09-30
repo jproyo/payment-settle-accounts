@@ -1,40 +1,15 @@
-#[cfg(test)]
-use mockall::{automock, predicate::*};
-
+//! Memory implementation of the payment engine.
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use super::PaymentEngine;
 use crate::domain::ClientId;
 use crate::domain::Transaction;
 use crate::domain::TransactionError;
 use crate::domain::TransactionResult;
 use crate::domain::TxId;
-
-/// Trait representing a payment engine. `PaymentEngine` is responsible for processing transactions
-/// one by one and keeping track of them in a `TransactionResult` per Client Account.
-#[cfg_attr(test, automock)]
-pub trait PaymentEngine {
-    /// Process a transaction using the payment engine.
-    ///
-    /// # Arguments
-    ///
-    /// * `transaction` - A reference to the transaction to be processed.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the transaction was processed successfully, or an `Err` containing
-    /// a `TransactionError` if an error occurred during processing.
-    fn process(&mut self, transaction: &Transaction) -> Result<(), TransactionError>;
-
-    /// Get a summary of the processed transactions.
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Iterator` of `TransactionResult` if there was no error representing the summary of the processed transactions.
-    fn summary(&self) -> Result<Box<dyn Iterator<Item = TransactionResult>>, TransactionError>;
-}
 
 // This storage will contain Deposit or Dispute transaction to keep track of the client's
 // disputes, resolves, and chargebacks.

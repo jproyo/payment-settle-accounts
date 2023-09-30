@@ -1,3 +1,4 @@
+//! Contains the entities used in the application.
 use std::fmt;
 use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 
