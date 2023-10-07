@@ -11,14 +11,8 @@ fn test_process_with_correct_results() {
     let result = engine.summary().unwrap().collect::<Vec<_>>();
     assert_eq!(result.len(), 2);
 
-    let expected: TransactionResultSummary = Account::builder()
-        .client_id(1_u16)
-        .available(dec!(0.4688))
-        .held(0)
-        .locked(false)
-        .build()
-        .into();
-
+    let expected: TransactionResultSummary =
+        Account::create_with(1_u16, dec!(0.4688), dec!(0), false, false).into();
     assert!(result.contains(&expected));
 }
 
@@ -32,14 +26,7 @@ fn test_process_with_correct_results_with_chargebacks() {
     let result = engine.summary().unwrap().collect::<Vec<_>>();
     assert_eq!(result.len(), 2);
 
-    let expected = Account::builder()
-        .client_id(1_u16)
-        .available(dec!(0.5))
-        .held(0)
-        .locked(true)
-        .build()
-        .into();
-
+    let expected = Account::create_with(1_u16, dec!(0.5), dec!(0), true, false).into();
     assert!(result.contains(&expected));
 }
 
@@ -55,20 +42,8 @@ fn test_process_with_correct_results_with_chargebacks_and_disputes() {
     assert_eq!(result.len(), 2);
 
     let expected = vec![
-        Account::builder()
-            .client_id(1_u16)
-            .available(80)
-            .held(0)
-            .locked(false)
-            .build()
-            .into(),
-        Account::builder()
-            .client_id(2_u16)
-            .available(80)
-            .held(0)
-            .locked(false)
-            .build()
-            .into(),
+        Account::create_with(1_u16, dec!(80), dec!(0), false, false).into(),
+        Account::create_with(2_u16, dec!(80), dec!(0), false, false).into(),
     ];
     result.iter().for_each(|obtained| {
         assert!(expected.contains(obtained));

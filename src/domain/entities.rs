@@ -1,5 +1,7 @@
 //! Contains the entities used in the application.
 
+use std::collections::HashMap;
+
 #[cfg(test)]
 use fake::Dummy;
 
@@ -77,50 +79,28 @@ impl Transaction {
 
     /// Returns the amount of the transaction or an error if it is missing.
     pub fn amount_or_err(&self, msg: &str) -> Result<Decimal, TransactionError> {
-        self.amount()
-            .ok_or_else(|| TransactionError::InvalidTransactionAmount(msg.into()))
-    }
-
-    /// Checks if the transaction should be tracked.
-    pub fn should_be_tracked(&self) -> bool {
-        matches!(
-            self.ty(),
-            TransactionType::Deposit | TransactionType::Dispute
-        )
-    }
-
-    /// Checks if there is a previous dispute for the transaction.
-    fn is_there_previous_dispute(&self, transaction_result: &[Transaction]) -> bool {
-        transaction_result.iter().any(|t| {
-            t.ty() == &TransactionType::Dispute && t.transaction_id() == self.transaction_id()
-        })
-    }
-
-    /// Finds the previous deposit transaction for the given transaction.
-    fn find_previous_deposit<'a, 'b>(
-        &'a self,
-        transaction_result: &'b [Transaction],
-    ) -> Option<&Transaction>
-    where
-        'b: 'a, // 'b lives longer than 'a
-    {
-        transaction_result.iter().find(|t| {
-            t.ty() == &TransactionType::Deposit && t.transaction_id() == self.transaction_id()
-        })
+        let amount = self
+            .amount()
+            .ok_or_else(|| TransactionError::InvalidTransactionAmount(msg.into()))?;
+        if amount < Decimal::ZERO {
+            return Err(TransactionError::InvalidTransactionAmount(
+                "Transaction amount is negative".into(),
+            ));
+        }
+        Ok(amount)
     }
 }
 
 /// Represents the result of a transaction.
-#[derive(PartialEq, TypedBuilder, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 #[cfg_attr(test, derive(Dummy))]
 pub struct Account {
     client_id: ClientId,
-    #[builder(setter(into))]
     available: Decimal,
-    #[builder(setter(into))]
     held: Decimal,
-    #[builder(default)]
     locked: bool,
+    being_disputed: bool,
+    previous_deposits: HashMap<TxId, Decimal>,
 }
 
 impl Account {
@@ -131,19 +111,43 @@ impl Account {
             available: Decimal::ZERO,
             held: Decimal::ZERO,
             locked: false,
+            being_disputed: false,
+            previous_deposits: HashMap::new(),
+        }
+    }
+
+    pub fn create_with(
+        client_id: ClientId,
+        available: Decimal,
+        held: Decimal,
+        locked: bool,
+        being_disputed: bool,
+    ) -> Self {
+        Self {
+            client_id,
+            available,
+            held,
+            locked,
+            being_disputed,
+            previous_deposits: HashMap::new(),
         }
     }
 
     /// Processes a transaction and updates the transaction result accordingly.
-    pub fn process(
-        &mut self,
-        transaction: &Transaction,
-        transactions: &[Transaction],
-    ) -> Result<(), TransactionError> {
+    pub fn process(&mut self, transaction: &Transaction) -> Result<(), TransactionError> {
+        if self.locked {
+            return Err(TransactionError::AccountLocked(transaction.clone()));
+        }
         match transaction.ty() {
             TransactionType::Deposit => {
                 let amount = transaction.amount_or_err("Deposit amount is missing")?;
+                if self.exists(transaction) {
+                    return Err(TransactionError::DuplicateTransaction(transaction.clone()));
+                }
                 self.available += amount;
+                self.previous_deposits
+                    .entry(transaction.transaction_id())
+                    .or_insert(amount);
             }
             TransactionType::Withdrawal => {
                 let amount = transaction.amount_or_err("Withdrawal amount is missing")?;
@@ -154,26 +158,35 @@ impl Account {
                 }
             }
             TransactionType::Dispute => {
-                if let Some(deposit) = transaction.find_previous_deposit(transactions) {
-                    let amount = deposit.amount_or_err("Deposit amount is missing")?;
+                if self.being_disputed {
+                    return Err(TransactionError::TransactionBeingDisputed(
+                        transaction.clone(),
+                    ));
+                }
+                if let Some(&amount) = self.find_previous_deposit(transaction) {
                     if self.available >= amount {
                         self.available -= amount;
                         self.held += amount;
+                        self.being_disputed = true;
                     } else {
                         return Err(TransactionError::InconsistenceBalance(
                             "Attempt to dispute more than available".into(),
                             transaction.clone(),
                         ));
                     }
+                } else {
+                    return Err(TransactionError::CannotDisputeWithoutDeposit(
+                        transaction.clone(),
+                    ));
                 }
             }
             TransactionType::Resolve => {
-                if transaction.is_there_previous_dispute(transactions) {
-                    if let Some(deposit) = transaction.find_previous_deposit(transactions) {
-                        let amount = deposit.amount_or_err("Deposit amount is missing")?;
+                if self.being_disputed {
+                    if let Some(&amount) = self.find_previous_deposit(transaction) {
                         if self.held >= amount {
                             self.available += amount;
                             self.held -= amount;
+                            self.being_disputed = false;
                         } else {
                             return Err(TransactionError::InconsistenceBalance(
                                 "Attempt to resolve more than held".into(),
@@ -181,14 +194,18 @@ impl Account {
                             ));
                         }
                     }
+                } else {
+                    return Err(TransactionError::CannotResolveWithoutDispute(
+                        transaction.clone(),
+                    ));
                 }
             }
             TransactionType::Chargeback => {
-                if transaction.is_there_previous_dispute(transactions) {
-                    if let Some(deposit) = transaction.find_previous_deposit(transactions) {
-                        let amount = deposit.amount_or_err("Deposit amount is missing")?;
+                if self.being_disputed {
+                    if let Some(&amount) = self.find_previous_deposit(transaction) {
                         if self.held >= amount {
                             self.held -= amount;
+                            self.being_disputed = false;
                             self.locked = true;
                         } else {
                             return Err(TransactionError::InconsistenceBalance(
@@ -197,10 +214,29 @@ impl Account {
                             ));
                         }
                     }
+                } else {
+                    return Err(TransactionError::CannotChargebackWithoutDispute(
+                        transaction.clone(),
+                    ));
                 }
             }
         }
         Ok(())
+    }
+
+    // Verify if the transaction was already processed with same id and type
+    fn exists(&self, transaction: &Transaction) -> bool {
+        self.previous_deposits
+            .get(&transaction.transaction_id())
+            .is_some()
+    }
+
+    /// Finds the previous deposit transaction for the given transaction.
+    fn find_previous_deposit<'a, 'b>(&'a self, transaction: &'b Transaction) -> Option<&Decimal>
+    where
+        'b: 'a, // 'b lives longer than 'a
+    {
+        self.previous_deposits.get(&transaction.transaction_id())
     }
 
     /// Returns the client ID associated with the transaction result.
@@ -269,10 +305,9 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
 
         assert!(result.is_ok());
         let expected = 12.into();
@@ -286,12 +321,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let withdrawal = Transaction::builder()
             .ty(TransactionType::Withdrawal)
@@ -300,7 +333,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&withdrawal, &transactions);
+        let result = transaction_result.process(&withdrawal);
         assert!(result.is_ok());
         assert_eq!(transaction_result.available, 0.into());
     }
@@ -313,12 +346,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let withdrawal = Transaction::builder()
             .ty(TransactionType::Withdrawal)
@@ -327,7 +358,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&withdrawal, &transactions);
+        let result = transaction_result.process(&withdrawal);
         assert!(result.is_err());
         assert_eq!(transaction_result.available, 12.into());
         match result {
@@ -344,12 +375,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -357,7 +386,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&dispute, &transactions);
+        let result = transaction_result.process(&dispute);
         assert!(result.is_ok());
         assert_eq!(transaction_result.available(), 0.into());
         assert_eq!(transaction_result.held(), 12.into());
@@ -371,12 +400,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -384,8 +411,8 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&dispute, &transactions);
-        assert!(result.is_ok());
+        let result = transaction_result.process(&dispute);
+        assert!(result.is_err());
         assert_eq!(transaction_result.available(), 12.into());
         assert_eq!(transaction_result.held(), 0.into());
     }
@@ -398,12 +425,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -411,9 +436,8 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&dispute, &transactions);
+        let result = transaction_result.process(&dispute);
         assert!(result.is_ok());
-        transactions.push(dispute);
 
         let resolve = Transaction::builder()
             .ty(TransactionType::Resolve)
@@ -421,7 +445,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&resolve, &transactions);
+        let result = transaction_result.process(&resolve);
         assert!(result.is_ok());
         assert_eq!(transaction_result.available(), 12.into());
         assert_eq!(transaction_result.held(), 0.into());
@@ -434,12 +458,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let withdrawal = Transaction::builder()
             .ty(TransactionType::Withdrawal)
@@ -448,7 +470,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&withdrawal, &transactions);
+        let result = transaction_result.process(&withdrawal);
         assert!(result.is_ok());
 
         let dispute = Transaction::builder()
@@ -457,7 +479,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&dispute, &transactions);
+        let result = transaction_result.process(&dispute);
         assert!(result.is_err());
         assert_eq!(transaction_result.available(), 7.into());
         assert_eq!(transaction_result.held(), 0.into());
@@ -475,12 +497,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let resolve = Transaction::builder()
             .ty(TransactionType::Resolve)
@@ -488,8 +508,8 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&resolve, &transactions);
-        assert!(result.is_ok());
+        let result = transaction_result.process(&resolve);
+        assert!(result.is_err());
         assert_eq!(transaction_result.available(), 12.into());
         assert_eq!(transaction_result.held(), 0.into());
     }
@@ -502,12 +522,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let resolve = Transaction::builder()
             .ty(TransactionType::Resolve)
@@ -515,8 +533,8 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&resolve, &transactions);
-        assert!(result.is_ok());
+        let result = transaction_result.process(&resolve);
+        assert!(result.is_err());
         assert_eq!(transaction_result.available(), 12.into());
         assert_eq!(transaction_result.held(), 0.into());
     }
@@ -529,12 +547,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -542,9 +558,8 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&dispute, &transactions);
+        let result = transaction_result.process(&dispute);
         assert!(result.is_ok());
-        transactions.push(dispute);
 
         let chargeback = Transaction::builder()
             .ty(TransactionType::Chargeback)
@@ -552,7 +567,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&chargeback, &transactions);
+        let result = transaction_result.process(&chargeback);
         assert!(result.is_ok());
         assert_eq!(transaction_result.available(), 0.into());
         assert_eq!(transaction_result.held(), 0.into());
@@ -566,12 +581,10 @@ mod tests {
             .transaction_id(1)
             .client_id(1)
             .build();
-        let mut transactions = vec![];
-        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
+        let mut transaction_result = Account::new(1);
 
-        let result = transaction_result.process(&deposit, &transactions);
+        let result = transaction_result.process(&deposit);
         assert!(result.is_ok());
-        transactions.push(deposit);
 
         let dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -579,9 +592,8 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&dispute, &transactions);
+        let result = transaction_result.process(&dispute);
         assert!(result.is_ok());
-        transactions.push(dispute);
 
         let chargeback = Transaction::builder()
             .ty(TransactionType::Chargeback)
@@ -589,7 +601,7 @@ mod tests {
             .client_id(1)
             .build();
 
-        let result = transaction_result.process(&chargeback, &transactions);
+        let result = transaction_result.process(&chargeback);
         assert!(result.is_ok());
         assert_eq!(transaction_result.available(), 0.into());
         assert_eq!(transaction_result.held(), 12.into());
