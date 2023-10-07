@@ -112,9 +112,10 @@ where
 #[cfg(test)]
 mod tests {
 
+    use fake::{Fake, Faker};
     use mockall::mock;
 
-    use crate::{MockPaymentEngine, MockSink, Transaction, TransactionResult};
+    use crate::{MockPaymentEngine, MockSink, Transaction, TransactionResultSummary};
 
     use super::*;
 
@@ -141,9 +142,10 @@ mod tests {
 
         // Set expectations for filter mock
         filter_mock.expect_process().times(3).returning(|_| Ok(()));
-        let returned = fake::vec![TransactionResult; 2];
+        let returned = fake::vec![TransactionResultSummary; 2];
         filter_mock.expect_summary().times(1).return_once(|| {
-            Ok(Box::new(returned.into_iter()) as Box<dyn Iterator<Item = TransactionResult>>)
+            Ok(Box::new(returned.into_iter())
+                as Box<dyn Iterator<Item = TransactionResultSummary>>)
         });
 
         // Set expectations for sink mock
@@ -199,10 +201,10 @@ mod tests {
             .return_once(|| Ok(Box::new(returned.into_iter().map(Ok))));
 
         // Set expectations for filter mock
-        filter_mock
-            .expect_process()
-            .times(1)
-            .returning(|_| Err(TransactionError::InsufficientFunds));
+        filter_mock.expect_process().times(1).returning(|_| {
+            let tx = Faker.fake();
+            Err(TransactionError::InsufficientFunds(tx))
+        });
         filter_mock.expect_summary().never();
         // Set expectations for sink mock
         sink_mock.expect_write().never();
@@ -266,9 +268,10 @@ mod tests {
 
         // Set expectations for filter mock
         filter_mock.expect_process().times(3).returning(|_| Ok(()));
-        let returned = fake::vec![TransactionResult; 2];
+        let returned = fake::vec![TransactionResultSummary; 2];
         filter_mock.expect_summary().times(1).return_once(|| {
-            Ok(Box::new(returned.into_iter()) as Box<dyn Iterator<Item = TransactionResult>>)
+            Ok(Box::new(returned.into_iter())
+                as Box<dyn Iterator<Item = TransactionResultSummary>>)
         });
 
         // Set expectations for sink mock

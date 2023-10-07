@@ -4,10 +4,8 @@ use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Stdout};
 
-use serde::Serialize;
-
 use crate::domain::TransactionError;
-use crate::{CentDenomination, ClientId, Transaction, TransactionResult};
+use crate::{Transaction, TransactionResultSummary};
 
 /// `CSVTransactionReader` is a wrapper around `csv::Reader`.
 pub struct CSVTransactionReader {
@@ -61,30 +59,9 @@ impl<'a> CSVTransactionReader {
         let rdr = csv::ReaderBuilder::new()
             .has_headers(true)
             .trim(csv::Trim::All)
+            .flexible(true)
             .from_reader(reader);
         CSVTransactionReader { reader: rdr }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct TransactionResultCSV {
-    client: ClientId,
-    available: CentDenomination,
-    held: CentDenomination,
-    total: CentDenomination,
-    locked: bool,
-}
-
-impl From<TransactionResult> for TransactionResultCSV {
-    /// Converts a `TransactionResult` into a `TransactionResultCSV`.
-    fn from(result: TransactionResult) -> Self {
-        Self {
-            client: result.client_id(),
-            available: result.available(),
-            held: result.held(),
-            total: result.total(),
-            locked: result.locked(),
-        }
     }
 }
 
@@ -111,7 +88,7 @@ impl CSVTransactionResultStdoutWriter {
     /// Writes the transaction result to the CSV writer.
     pub fn write<T>(&mut self, result: T) -> Result<(), TransactionError>
     where
-        T: Into<TransactionResultCSV>,
+        T: Into<TransactionResultSummary>,
     {
         self.writer.serialize(result.into())?;
         Ok(())
@@ -126,6 +103,8 @@ impl Default for CSVTransactionResultStdoutWriter {
 }
 #[cfg(test)]
 mod tests {
+    use rust_decimal_macros::dec;
+
     use crate::TransactionType;
 
     use super::*;
@@ -140,13 +119,13 @@ mod tests {
                 .ty(TransactionType::Deposit)
                 .client_id(1_u16)
                 .transaction_id(1_u32)
-                .amount(1.0)
+                .amount(1)
                 .build(),
             Transaction::builder()
                 .ty(TransactionType::Withdrawal)
                 .client_id(1_u16)
                 .transaction_id(4_u32)
-                .amount(1.5)
+                .amount(dec!(1.5))
                 .build(),
             Transaction::builder()
                 .ty(TransactionType::Dispute)
@@ -165,6 +144,17 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid transaction amount Cannot parse \"1.0.0\""));
+            .contains("expected a Decimal type"));
+    }
+
+    #[test]
+    fn test_csv_reader_1() {
+        let mut csv_reader = CSVTransactionReader::new("tests/data/tx_tests_wrong_formatted.csv");
+        let result = csv_reader.iter().collect::<Result<Vec<Transaction>, _>>();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Error parsing CSV file"));
     }
 }

@@ -1,22 +1,24 @@
 //! Memory implementation of the payment engine.
+use log::warn;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
 
 use super::PaymentEngine;
+use crate::domain::Account;
 use crate::domain::ClientId;
 use crate::domain::Transaction;
 use crate::domain::TransactionError;
-use crate::domain::TransactionResult;
 use crate::domain::TxId;
+use crate::TransactionResultSummary;
 
 // This storage will contain Deposit or Dispute transaction to keep track of the client's
 // disputes, resolves, and chargebacks.
 type TxById = HashMap<TxId, RwLock<Vec<Transaction>>>;
 
 /// This storage will contain the current state of the client's account.
-type TxByClientId = HashMap<ClientId, RwLock<TransactionResult>>;
+type TxByClientId = HashMap<ClientId, RwLock<Account>>;
 
 /// A thread-safe payment engine that stores transaction information in memory.
 /// State is protected by a `RwLock` to allow concurrent reads and exclusive writes in order
@@ -85,26 +87,21 @@ impl PaymentEngine for MemoryThreadSafePaymentEngine {
         let mut transactions = self.tx_state_by_client.write()?;
         let tx_by_client = transactions
             .entry(transaction.client_id())
-            .or_insert_with(|| {
-                RwLock::new(
-                    TransactionResult::builder()
-                        .client_id(transaction.client_id())
-                        .available(0)
-                        .held(0)
-                        .build(),
-                )
-            });
+            .or_insert_with(|| RwLock::new(Account::new(transaction.client_id())));
         let tx_by_client = tx_by_client.get_mut()?;
         // Open a new scope to release the lock on tx_by_client after use it for reading
         {
             let tx_by_id = self.tx_by_id.read()?;
             let tx_by_id_txs = tx_by_id.get(&transaction.transaction_id());
-            match tx_by_id_txs {
-                Some(txs) => {
-                    let txs = txs.read()?;
-                    tx_by_client.process(transaction, &txs)?;
+            let mut vec = vec![];
+            if let Some(txs) = tx_by_id_txs {
+                vec = txs.read()?.to_vec();
+            }
+            match tx_by_client.process(transaction, &vec) {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("{}", e);
                 }
-                None => tx_by_client.process(transaction, &[])?,
             }
         }
         if transaction.should_be_tracked() {
@@ -141,12 +138,14 @@ impl PaymentEngine for MemoryThreadSafePaymentEngine {
     ///    // TransactionResult { client_id: 1, available: 0, held: 0, total: 0, locked: false }
     /// }
     /// ```
-    fn summary(&self) -> Result<Box<dyn Iterator<Item = TransactionResult>>, TransactionError> {
-        let iter: Vec<TransactionResult> = self
+    fn summary(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = TransactionResultSummary>>, TransactionError> {
+        let iter: Vec<TransactionResultSummary> = self
             .tx_state_by_client
             .read()?
             .values()
-            .map(|tx| tx.read().unwrap().clone())
+            .map(|tx| tx.read().unwrap().clone().into())
             .collect();
         Ok(Box::new(iter.into_iter()))
     }
@@ -169,19 +168,19 @@ mod tests {
             Transaction::builder()
                 .client_id(1)
                 .transaction_id(1)
-                .amount(1.0)
+                .amount(1)
                 .ty(TransactionType::Deposit)
                 .build(),
             Transaction::builder()
                 .client_id(1)
                 .transaction_id(2)
-                .amount(1.0)
+                .amount(1)
                 .ty(TransactionType::Deposit)
                 .build(),
             Transaction::builder()
                 .client_id(2)
                 .transaction_id(1)
-                .amount(10.0)
+                .amount(10)
                 .ty(TransactionType::Deposit)
                 .build(),
             Transaction::builder()
@@ -232,7 +231,7 @@ mod tests {
         let transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(1.0)
+            .amount(1)
             .ty(TransactionType::Deposit)
             .build();
 
@@ -266,7 +265,7 @@ mod tests {
         let transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(1.0)
+            .amount(1)
             .ty(TransactionType::Deposit)
             .build();
 
@@ -293,7 +292,7 @@ mod tests {
         let transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(1.0)
+            .amount(1)
             .ty(TransactionType::Deposit)
             .build();
 
@@ -318,7 +317,7 @@ mod tests {
         let transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(1.0)
+            .amount(1)
             .ty(TransactionType::Resolve)
             .build();
 

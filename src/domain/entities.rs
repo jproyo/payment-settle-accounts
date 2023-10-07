@@ -1,12 +1,10 @@
 //! Contains the entities used in the application.
-use std::fmt;
-use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 
 #[cfg(test)]
 use fake::Dummy;
 
-use serde::de::Error;
-use serde::{Deserialize, Serialize, Serializer};
+use ::serde::{Deserialize, Serialize};
+use rust_decimal::Decimal;
 use typed_builder::TypedBuilder;
 
 use crate::TransactionError;
@@ -32,105 +30,6 @@ pub enum TransactionType {
     Chargeback,
 }
 
-/// Represents a monetary value in cents denomination to avoid floating point precissions issues.
-#[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy)]
-#[cfg_attr(test, derive(Dummy))]
-pub struct CentDenomination(i64);
-
-impl Deref for CentDenomination {
-    type Target = i64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AddAssign for CentDenomination {
-    fn add_assign(&mut self, other: Self) {
-        self.0 += other.0;
-    }
-}
-
-impl SubAssign for CentDenomination {
-    fn sub_assign(&mut self, other: Self) {
-        self.0 -= other.0;
-    }
-}
-
-impl Sub for CentDenomination {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self::Output {
-        CentDenomination(self.0 - other.0)
-    }
-}
-
-impl Add for CentDenomination {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self::Output {
-        CentDenomination(self.0 + other.0)
-    }
-}
-
-impl fmt::Debug for CentDenomination {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.4}", self.as_f64())
-    }
-}
-
-impl Serialize for CentDenomination {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let formatted_value = format!("{:.4}", &self.as_f64());
-        serializer.serialize_str(&formatted_value)
-    }
-}
-
-impl<'de> Deserialize<'de> for CentDenomination {
-    fn deserialize<D>(deserializer: D) -> Result<CentDenomination, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)
-            .map_err(|e| TransactionError::InvalidTransactionAmount(e.to_string()))
-            .map_err(Error::custom)?;
-        let s = s
-            .parse::<f64>()
-            .map_err(|_| {
-                TransactionError::InvalidTransactionAmount(format!("Cannot parse {:?}", s))
-            })
-            .map_err(Error::custom)?;
-        Ok(CentDenomination::from_f64(s))
-    }
-}
-
-impl CentDenomination {
-    /// Returns the value as a `f64` representing the monetary value.
-    pub fn as_f64(&self) -> f64 {
-        self.0 as f64 / 100.0
-    }
-
-    /// Creates a `CentDenomination` from a `f64` value representing the monetary value.
-    pub fn from_f64(s: f64) -> CentDenomination {
-        CentDenomination((s * 100.0) as i64)
-    }
-}
-
-impl From<f64> for CentDenomination {
-    fn from(s: f64) -> CentDenomination {
-        CentDenomination::from_f64(s)
-    }
-}
-
-impl From<i64> for CentDenomination {
-    fn from(s: i64) -> CentDenomination {
-        CentDenomination(s * 100)
-    }
-}
-
 /// Represents a client ID.
 pub type ClientId = u16;
 
@@ -152,7 +51,7 @@ pub struct Transaction {
 
     #[builder(default, setter(strip_option), setter(into))]
     #[serde(rename = "amount")]
-    amount: Option<CentDenomination>,
+    amount: Option<Decimal>,
 }
 
 impl Transaction {
@@ -172,12 +71,12 @@ impl Transaction {
     }
 
     /// Returns the amount of the transaction.
-    pub fn amount(&self) -> Option<CentDenomination> {
+    pub fn amount(&self) -> Option<Decimal> {
         self.amount
     }
 
     /// Returns the amount of the transaction or an error if it is missing.
-    pub fn amount_or_err(&self, msg: &str) -> Result<CentDenomination, TransactionError> {
+    pub fn amount_or_err(&self, msg: &str) -> Result<Decimal, TransactionError> {
         self.amount()
             .ok_or_else(|| TransactionError::InvalidTransactionAmount(msg.into()))
     }
@@ -214,17 +113,27 @@ impl Transaction {
 /// Represents the result of a transaction.
 #[derive(PartialEq, TypedBuilder, Clone, Debug)]
 #[cfg_attr(test, derive(Dummy))]
-pub struct TransactionResult {
+pub struct Account {
     client_id: ClientId,
     #[builder(setter(into))]
-    available: CentDenomination,
+    available: Decimal,
     #[builder(setter(into))]
-    held: CentDenomination,
+    held: Decimal,
     #[builder(default)]
     locked: bool,
 }
 
-impl TransactionResult {
+impl Account {
+    /// Creates a new transaction result with default settle in 0 for `client_id`.
+    pub fn new(client_id: ClientId) -> Self {
+        Self {
+            client_id,
+            available: Decimal::ZERO,
+            held: Decimal::ZERO,
+            locked: false,
+        }
+    }
+
     /// Processes a transaction and updates the transaction result accordingly.
     pub fn process(
         &mut self,
@@ -241,7 +150,7 @@ impl TransactionResult {
                 if self.available >= amount {
                     self.available -= amount;
                 } else {
-                    return Err(TransactionError::InsufficientFunds);
+                    return Err(TransactionError::InsufficientFunds(transaction.clone()));
                 }
             }
             TransactionType::Dispute => {
@@ -253,6 +162,7 @@ impl TransactionResult {
                     } else {
                         return Err(TransactionError::InconsistenceBalance(
                             "Attempt to dispute more than available".into(),
+                            transaction.clone(),
                         ));
                     }
                 }
@@ -267,6 +177,7 @@ impl TransactionResult {
                         } else {
                             return Err(TransactionError::InconsistenceBalance(
                                 "Attempt to resolve more than held".into(),
+                                transaction.clone(),
                             ));
                         }
                     }
@@ -282,6 +193,7 @@ impl TransactionResult {
                         } else {
                             return Err(TransactionError::InconsistenceBalance(
                                 "Attempt to chargeback more than held".into(),
+                                transaction.clone(),
                             ));
                         }
                     }
@@ -297,17 +209,17 @@ impl TransactionResult {
     }
 
     /// Returns the available amount in the transaction result.
-    pub fn available(&self) -> CentDenomination {
+    pub fn available(&self) -> Decimal {
         self.available
     }
 
     /// Returns the held amount in the transaction result.
-    pub fn held(&self) -> CentDenomination {
+    pub fn held(&self) -> Decimal {
         self.held
     }
 
     /// Returns the total amount in the transaction result.
-    pub fn total(&self) -> CentDenomination {
+    pub fn total(&self) -> Decimal {
         self.held + self.available
     }
 
@@ -316,60 +228,49 @@ impl TransactionResult {
         self.locked
     }
 }
+
+#[derive(Debug, Serialize, PartialEq)]
+#[cfg_attr(test, derive(Dummy))]
+pub struct TransactionResultSummary {
+    client: ClientId,
+    #[serde(with = "rust_decimal::serde::str")]
+    available: Decimal,
+    #[serde(with = "rust_decimal::serde::str")]
+    held: Decimal,
+    #[serde(with = "rust_decimal::serde::str")]
+    total: Decimal,
+    locked: bool,
+}
+
+impl From<Account> for TransactionResultSummary {
+    /// Converts a `TransactionResult` into a `TransactionResultCSV`.
+    fn from(result: Account) -> Self {
+        Self {
+            client: result.client_id(),
+            available: result.available().round_dp(4),
+            held: result.held().round_dp(4),
+            total: result.total().round_dp(4),
+            locked: result.locked(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use rust_decimal_macros::dec;
+
     use super::*;
-
-    #[test]
-    fn test_deserialize_cent_denomination() {
-        let to_parse = [
-            "\"0.5\"",
-            "\"0.50\"",
-            "\"0.500\"",
-            "\"0.5000\"",
-            "\"12.2333232\"",
-            "\"12.23332\"",
-            "\"12.23\"",
-            "\"12.2\"",
-            "\"0\"",
-            "\"0.0\"",
-            "\"0.00\"",
-            "\"0.000\"",
-            "\"0.0000\"",
-            "\"2131233212\"",
-            "\"2131233\"",
-            "\"1233\"",
-        ];
-        for s in to_parse.iter() {
-            let deserializer = &mut serde_json::Deserializer::from_str(s);
-            let result = CentDenomination::deserialize(deserializer);
-            assert!(result.is_ok());
-        }
-    }
-
-    #[test]
-    fn test_deserialize_cent_denomination_error() {
-        let to_parse = ["\"0.0.\"", "\"0.0.0\"", "\"45.45.45\"", "Not a number"];
-        for s in to_parse.iter() {
-            let deserializer = &mut serde_json::Deserializer::from_str(s);
-            assert!(CentDenomination::deserialize(deserializer).is_err());
-        }
-    }
 
     #[test]
     fn test_process_deposit() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
 
@@ -381,16 +282,12 @@ mod tests {
     fn test_process_withdrawal_with_sufficient_funds() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -412,16 +309,12 @@ mod tests {
     fn test_process_withdrawal_with_insufficient_funds() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -429,7 +322,7 @@ mod tests {
 
         let withdrawal = Transaction::builder()
             .ty(TransactionType::Withdrawal)
-            .amount(12.1)
+            .amount(dec!(12.1))
             .transaction_id(2)
             .client_id(1)
             .build();
@@ -438,7 +331,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(transaction_result.available, 12.into());
         match result {
-            Err(TransactionError::InsufficientFunds) => {}
+            Err(TransactionError::InsufficientFunds(_)) => {}
             _ => panic!("Unexpected error"),
         }
     }
@@ -447,16 +340,12 @@ mod tests {
     fn test_process_dispute_with_valid_deposit() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(dec!(12.0))
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -478,16 +367,12 @@ mod tests {
     fn test_process_dispute_with_invalid_deposit() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(dec!(12.0))
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -509,16 +394,12 @@ mod tests {
     fn test_process_resolve_with_valid_dispute() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(dec!(12.0))
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -549,16 +430,12 @@ mod tests {
     fn test_process_dispute_with_not_enough_available() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -585,7 +462,7 @@ mod tests {
         assert_eq!(transaction_result.available(), 7.into());
         assert_eq!(transaction_result.held(), 0.into());
         match result {
-            Err(TransactionError::InconsistenceBalance(_)) => {}
+            Err(TransactionError::InconsistenceBalance(..)) => {}
             _ => panic!("Unexpected error"),
         }
     }
@@ -594,16 +471,12 @@ mod tests {
     fn test_process_resolve_with_no_dispute() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -625,16 +498,12 @@ mod tests {
     fn test_process_resolve_with_no_funds() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -656,16 +525,12 @@ mod tests {
     fn test_process_chargeback_with_valid_dispute() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());
@@ -697,16 +562,12 @@ mod tests {
     fn test_process_chargeback_with_no_dispute() {
         let deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(12.0)
+            .amount(12)
             .transaction_id(1)
             .client_id(1)
             .build();
         let mut transactions = vec![];
-        let mut transaction_result = TransactionResult::builder()
-            .client_id(1)
-            .available(0.0)
-            .held(0.0)
-            .build();
+        let mut transaction_result = Account::builder().client_id(1).available(0).held(0).build();
 
         let result = transaction_result.process(&deposit, &transactions);
         assert!(result.is_ok());

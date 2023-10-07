@@ -1,16 +1,21 @@
+use env_logger::Env;
 use payment_settle_accounts::TransactionPipelineBuilder;
 use std::env;
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("Usage: {} <csv-complete-filename>", args[0]);
-        return;
-    }
+fn main() -> anyhow::Result<()> {
+    let filename = match env::args().nth(1) {
+        Some(filename) => Ok(filename),
+        None => Err(anyhow::format_err!(
+            "Usage: {} <csv-complete-filename>",
+            env::args().next().unwrap(),
+        )),
+    }?;
 
-    let filename = &args[1];
-    let mut program = TransactionPipelineBuilder::csv_pipeline(filename);
+    env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
+
+    let mut program = TransactionPipelineBuilder::csv_pipeline(filename.as_str());
     program
         .run()
-        .unwrap_or_else(|e| panic!("Error running transaction pipeline: {}", e));
+        .map_err(|e| anyhow::anyhow!("Error running transaction pipeline: {}", e))?;
+    Ok(())
 }

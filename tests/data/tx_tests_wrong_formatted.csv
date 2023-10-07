@@ -1,0 +1,10 @@
+type,      client,     tx,        amount
+deposit
+deposit,,,
+withdrawal,    2,    102,
+withdrawal,    2,    103
+
+deposit  ,      3,    202 ,
+deposit  ,      3,    203
+unknown,1,2,3
+

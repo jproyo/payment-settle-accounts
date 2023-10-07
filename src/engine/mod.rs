@@ -4,7 +4,7 @@ mod memory;
 #[cfg(test)]
 use mockall::{automock, predicate::*};
 
-use crate::{Transaction, TransactionError, TransactionResult};
+use crate::{Transaction, TransactionError, TransactionResultSummary};
 
 /// Trait representing a payment engine. `PaymentEngine` is responsible for processing transactions
 /// one by one and keeping track of them in a `TransactionResult` per Client Account.
@@ -26,8 +26,10 @@ pub trait PaymentEngine {
     ///
     /// # Returns
     ///
-    /// Returns a `Iterator` of `TransactionResult` if there was no error representing the summary of the processed transactions.
-    fn summary(&self) -> Result<Box<dyn Iterator<Item = TransactionResult>>, TransactionError>;
+    /// Returns a `Iterator` of `TransactionResultSummary` if there was no error representing the summary of the processed transactions.
+    fn summary(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = TransactionResultSummary>>, TransactionError>;
 }
 
 pub use memory::MemoryThreadSafePaymentEngine;

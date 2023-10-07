@@ -8,7 +8,7 @@ pub use csv::CSVTransactionResultStdoutWriter;
 
 use crate::Transaction;
 use crate::TransactionError;
-use crate::TransactionResult;
+use crate::TransactionResultSummary;
 
 pub trait Source {
     fn read(
@@ -32,11 +32,11 @@ impl Source for CSVTransactionReader {
 
 #[cfg_attr(test, automock)]
 pub trait Sink {
-    fn write(&mut self, record: TransactionResult) -> Result<(), TransactionError>;
+    fn write(&mut self, record: TransactionResultSummary) -> Result<(), TransactionError>;
 }
 
 impl Sink for CSVTransactionResultStdoutWriter {
-    fn write(&mut self, record: TransactionResult) -> Result<(), TransactionError> {
+    fn write(&mut self, record: TransactionResultSummary) -> Result<(), TransactionError> {
         self.write(record)
     }
 }
