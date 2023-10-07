@@ -26,7 +26,7 @@ pub enum TransactionError {
     InsufficientFunds(Transaction),
     #[error("Account locked for dispute transaction [{0:?}]")]
     AccountLocked(Transaction),
-    #[error("Transaction already processed with same id and type [{0:?}]")]
+    #[error("Transaction already processed with same id [{0:?}]")]
     DuplicateTransaction(Transaction),
     #[error("Transaction cannot be disputed without a previous deposit [{0:?}]")]
     CannotDisputeWithoutDeposit(Transaction),

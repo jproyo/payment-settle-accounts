@@ -1,5 +1,6 @@
 //! Contains the entities used in the application.
 
+use core::fmt;
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -91,16 +92,60 @@ impl Transaction {
     }
 }
 
-/// Represents the result of a transaction.
 #[derive(PartialEq, Clone, Debug)]
+#[cfg_attr(test, derive(Dummy))]
+enum TxStatus {
+    Depoit,
+    BeingDisputed,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+#[cfg_attr(test, derive(Dummy))]
+struct TxTrack {
+    amount: Decimal,
+    status: TxStatus,
+}
+
+impl TxTrack {
+    fn new(amount: Decimal) -> Self {
+        Self {
+            amount,
+            status: TxStatus::Depoit,
+        }
+    }
+
+    fn being_disputed(&mut self) -> bool {
+        self.status == TxStatus::BeingDisputed
+    }
+
+    fn amount(&self) -> Decimal {
+        self.amount
+    }
+}
+
+/// Represents the result of a transaction.
+#[derive(PartialEq, Clone)]
 #[cfg_attr(test, derive(Dummy))]
 pub struct Account {
     client_id: ClientId,
     available: Decimal,
     held: Decimal,
     locked: bool,
-    being_disputed: bool,
-    previous_deposits: HashMap<TxId, Decimal>,
+    previous_deposits: HashMap<TxId, TxTrack>,
+}
+
+impl fmt::Debug for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "client: {}, available: {}, held: {}, total: {}, locked: {}",
+            self.client_id,
+            self.available,
+            self.held,
+            self.available + self.held,
+            self.locked,
+        )
+    }
 }
 
 impl Account {
@@ -111,7 +156,6 @@ impl Account {
             available: Decimal::ZERO,
             held: Decimal::ZERO,
             locked: false,
-            being_disputed: false,
             previous_deposits: HashMap::new(),
         }
     }
@@ -121,14 +165,12 @@ impl Account {
         available: Decimal,
         held: Decimal,
         locked: bool,
-        being_disputed: bool,
     ) -> Self {
         Self {
             client_id,
             available,
             held,
             locked,
-            being_disputed,
             previous_deposits: HashMap::new(),
         }
     }
@@ -146,11 +188,13 @@ impl Account {
                 }
                 self.available += amount;
                 self.previous_deposits
-                    .entry(transaction.transaction_id())
-                    .or_insert(amount);
+                    .insert(transaction.transaction_id(), TxTrack::new(amount));
             }
             TransactionType::Withdrawal => {
                 let amount = transaction.amount_or_err("Withdrawal amount is missing")?;
+                if self.exists(transaction) {
+                    return Err(TransactionError::DuplicateTransaction(transaction.clone()));
+                }
                 if self.available >= amount {
                     self.available -= amount;
                 } else {
@@ -158,16 +202,20 @@ impl Account {
                 }
             }
             TransactionType::Dispute => {
-                if self.being_disputed {
-                    return Err(TransactionError::TransactionBeingDisputed(
-                        transaction.clone(),
-                    ));
-                }
-                if let Some(&amount) = self.find_previous_deposit(transaction) {
+                if let Some(ref mut tx) = self
+                    .previous_deposits
+                    .get_mut(&transaction.transaction_id())
+                {
+                    if tx.being_disputed() {
+                        return Err(TransactionError::TransactionBeingDisputed(
+                            transaction.clone(),
+                        ));
+                    }
+                    let amount = tx.amount();
                     if self.available >= amount {
                         self.available -= amount;
                         self.held += amount;
-                        self.being_disputed = true;
+                        tx.status = TxStatus::BeingDisputed;
                     } else {
                         return Err(TransactionError::InconsistenceBalance(
                             "Attempt to dispute more than available".into(),
@@ -181,43 +229,48 @@ impl Account {
                 }
             }
             TransactionType::Resolve => {
-                if self.being_disputed {
-                    if let Some(&amount) = self.find_previous_deposit(transaction) {
-                        if self.held >= amount {
-                            self.available += amount;
-                            self.held -= amount;
-                            self.being_disputed = false;
-                        } else {
-                            return Err(TransactionError::InconsistenceBalance(
-                                "Attempt to resolve more than held".into(),
-                                transaction.clone(),
-                            ));
-                        }
+                if let Some(tx) = self
+                    .previous_deposits
+                    .get_mut(&transaction.transaction_id())
+                {
+                    if !tx.being_disputed() {
+                        return Err(TransactionError::CannotResolveWithoutDispute(
+                            transaction.clone(),
+                        ));
                     }
-                } else {
-                    return Err(TransactionError::CannotResolveWithoutDispute(
-                        transaction.clone(),
-                    ));
+                    let amount = tx.amount();
+                    if self.held >= amount {
+                        self.available += amount;
+                        self.held -= amount;
+                        tx.status = TxStatus::Depoit;
+                    } else {
+                        return Err(TransactionError::InconsistenceBalance(
+                            "Attempt to resolve more than held".into(),
+                            transaction.clone(),
+                        ));
+                    }
                 }
             }
             TransactionType::Chargeback => {
-                if self.being_disputed {
-                    if let Some(&amount) = self.find_previous_deposit(transaction) {
-                        if self.held >= amount {
-                            self.held -= amount;
-                            self.being_disputed = false;
-                            self.locked = true;
-                        } else {
-                            return Err(TransactionError::InconsistenceBalance(
-                                "Attempt to chargeback more than held".into(),
-                                transaction.clone(),
-                            ));
-                        }
+                if let Some(ref mut tx) = self
+                    .previous_deposits
+                    .get_mut(&transaction.transaction_id())
+                {
+                    if !tx.being_disputed() {
+                        return Err(TransactionError::CannotChargebackWithoutDispute(
+                            transaction.clone(),
+                        ));
                     }
-                } else {
-                    return Err(TransactionError::CannotChargebackWithoutDispute(
-                        transaction.clone(),
-                    ));
+                    let amount = tx.amount();
+                    if self.held >= amount {
+                        self.held -= amount;
+                        self.locked = true;
+                    } else {
+                        return Err(TransactionError::InconsistenceBalance(
+                            "Attempt to chargeback more than held".into(),
+                            transaction.clone(),
+                        ));
+                    }
                 }
             }
         }
@@ -229,14 +282,6 @@ impl Account {
         self.previous_deposits
             .get(&transaction.transaction_id())
             .is_some()
-    }
-
-    /// Finds the previous deposit transaction for the given transaction.
-    fn find_previous_deposit<'a, 'b>(&'a self, transaction: &'b Transaction) -> Option<&Decimal>
-    where
-        'b: 'a, // 'b lives longer than 'a
-    {
-        self.previous_deposits.get(&transaction.transaction_id())
     }
 
     /// Returns the client ID associated with the transaction result.
