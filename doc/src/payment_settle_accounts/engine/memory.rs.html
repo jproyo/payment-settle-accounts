@@ -280,78 +280,22 @@
 <a href="#280" id="280">280</a>
 <a href="#281" id="281">281</a>
 <a href="#282" id="282">282</a>
-<a href="#283" id="283">283</a>
-<a href="#284" id="284">284</a>
-<a href="#285" id="285">285</a>
-<a href="#286" id="286">286</a>
-<a href="#287" id="287">287</a>
-<a href="#288" id="288">288</a>
-<a href="#289" id="289">289</a>
-<a href="#290" id="290">290</a>
-<a href="#291" id="291">291</a>
-<a href="#292" id="292">292</a>
-<a href="#293" id="293">293</a>
-<a href="#294" id="294">294</a>
-<a href="#295" id="295">295</a>
-<a href="#296" id="296">296</a>
-<a href="#297" id="297">297</a>
-<a href="#298" id="298">298</a>
-<a href="#299" id="299">299</a>
-<a href="#300" id="300">300</a>
-<a href="#301" id="301">301</a>
-<a href="#302" id="302">302</a>
-<a href="#303" id="303">303</a>
-<a href="#304" id="304">304</a>
-<a href="#305" id="305">305</a>
-<a href="#306" id="306">306</a>
-<a href="#307" id="307">307</a>
-<a href="#308" id="308">308</a>
-<a href="#309" id="309">309</a>
-<a href="#310" id="310">310</a>
-<a href="#311" id="311">311</a>
-<a href="#312" id="312">312</a>
-<a href="#313" id="313">313</a>
-<a href="#314" id="314">314</a>
-<a href="#315" id="315">315</a>
-<a href="#316" id="316">316</a>
-<a href="#317" id="317">317</a>
-<a href="#318" id="318">318</a>
-<a href="#319" id="319">319</a>
-<a href="#320" id="320">320</a>
-<a href="#321" id="321">321</a>
-<a href="#322" id="322">322</a>
-<a href="#323" id="323">323</a>
-<a href="#324" id="324">324</a>
-<a href="#325" id="325">325</a>
-<a href="#326" id="326">326</a>
-<a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a>
-<a href="#329" id="329">329</a>
-<a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
-<a href="#332" id="332">332</a>
-<a href="#333" id="333">333</a>
-<a href="#334" id="334">334</a>
-<a href="#335" id="335">335</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Memory implementation of the payment engine.
-</span><span class="kw">use </span>std::collections::HashMap;
+</span><span class="kw">use </span>log::warn;
+<span class="kw">use </span>std::collections::HashMap;
 <span class="kw">use </span>std::fmt;
 <span class="kw">use </span>std::sync::Arc;
 <span class="kw">use </span>std::sync::RwLock;
 
 <span class="kw">use </span><span class="kw">super</span>::PaymentEngine;
+<span class="kw">use </span><span class="kw">crate</span>::domain::Account;
 <span class="kw">use </span><span class="kw">crate</span>::domain::ClientId;
 <span class="kw">use </span><span class="kw">crate</span>::domain::Transaction;
 <span class="kw">use </span><span class="kw">crate</span>::domain::TransactionError;
-<span class="kw">use </span><span class="kw">crate</span>::domain::TransactionResult;
-<span class="kw">use </span><span class="kw">crate</span>::domain::TxId;
-
-<span class="comment">// This storage will contain Deposit or Dispute transaction to keep track of the client&#39;s
-// disputes, resolves, and chargebacks.
-</span><span class="kw">type </span>TxById = HashMap&lt;TxId, RwLock&lt;Vec&lt;Transaction&gt;&gt;&gt;;
+<span class="kw">use </span><span class="kw">crate</span>::TransactionResultSummary;
 
 <span class="doccomment">/// This storage will contain the current state of the client&#39;s account.
-</span><span class="kw">type </span>TxByClientId = HashMap&lt;ClientId, RwLock&lt;TransactionResult&gt;&gt;;
+</span><span class="kw">type </span>TxByClientId = HashMap&lt;ClientId, RwLock&lt;Account&gt;&gt;;
 
 <span class="doccomment">/// A thread-safe payment engine that stores transaction information in memory.
 /// State is protected by a `RwLock` to allow concurrent reads and exclusive writes in order
@@ -359,7 +303,6 @@
 </span><span class="attr">#[derive(Clone)]
 </span><span class="kw">pub struct </span>MemoryThreadSafePaymentEngine {
     tx_state_by_client: Arc&lt;RwLock&lt;TxByClientId&gt;&gt;,
-    tx_by_id: Arc&lt;RwLock&lt;TxById&gt;&gt;,
 }
 
 <span class="kw">impl </span>fmt::Debug <span class="kw">for </span>MemoryThreadSafePaymentEngine {
@@ -381,7 +324,6 @@
     </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         MemoryThreadSafePaymentEngine {
             tx_state_by_client: Arc::new(RwLock::new(HashMap::new())),
-            tx_by_id: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -420,34 +362,13 @@
         <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="self">self</span>.tx_state_by_client.write()<span class="question-mark">?</span>;
         <span class="kw">let </span>tx_by_client = transactions
             .entry(transaction.client_id())
-            .or_insert_with(|| {
-                RwLock::new(
-                    TransactionResult::builder()
-                        .client_id(transaction.client_id())
-                        .available(<span class="number">0</span>)
-                        .held(<span class="number">0</span>)
-                        .build(),
-                )
-            });
+            .or_insert_with(|| RwLock::new(Account::new(transaction.client_id())));
         <span class="kw">let </span>tx_by_client = tx_by_client.get_mut()<span class="question-mark">?</span>;
-        <span class="comment">// Open a new scope to release the lock on tx_by_client after use it for reading
-        </span>{
-            <span class="kw">let </span>tx_by_id = <span class="self">self</span>.tx_by_id.read()<span class="question-mark">?</span>;
-            <span class="kw">let </span>tx_by_id_txs = tx_by_id.get(<span class="kw-2">&amp;</span>transaction.transaction_id());
-            <span class="kw">match </span>tx_by_id_txs {
-                <span class="prelude-val">Some</span>(txs) =&gt; {
-                    <span class="kw">let </span>txs = txs.read()<span class="question-mark">?</span>;
-                    tx_by_client.process(transaction, <span class="kw-2">&amp;</span>txs)<span class="question-mark">?</span>;
-                }
-                <span class="prelude-val">None </span>=&gt; tx_by_client.process(transaction, <span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>,
+        <span class="kw">match </span>tx_by_client.process(transaction) {
+            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {}
+            <span class="prelude-val">Err</span>(e) =&gt; {
+                <span class="macro">warn!</span>(<span class="string">&quot;{}&quot;</span>, e);
             }
-        }
-        <span class="kw">if </span>transaction.should_be_tracked() {
-            <span class="kw">let </span><span class="kw-2">mut </span>tx_by_id = <span class="self">self</span>.tx_by_id.write()<span class="question-mark">?</span>;
-            <span class="kw">let </span>tx_by_id = tx_by_id
-                .entry(transaction.transaction_id())
-                .or_insert_with(|| RwLock::new(<span class="macro">vec!</span>[]));
-            tx_by_id.write()<span class="question-mark">?</span>.push(transaction.clone());
         }
         <span class="prelude-val">Ok</span>(())
     }
@@ -476,12 +397,14 @@
     ///    // TransactionResult { client_id: 1, available: 0, held: 0, total: 0, locked: false }
     /// }
     /// ```
-    </span><span class="kw">fn </span>summary(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>Iterator&lt;Item = TransactionResult&gt;&gt;, TransactionError&gt; {
-        <span class="kw">let </span>iter: Vec&lt;TransactionResult&gt; = <span class="self">self
+    </span><span class="kw">fn </span>summary(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>Iterator&lt;Item = TransactionResultSummary&gt;&gt;, TransactionError&gt; {
+        <span class="kw">let </span>iter: Vec&lt;TransactionResultSummary&gt; = <span class="self">self
             </span>.tx_state_by_client
             .read()<span class="question-mark">?
             </span>.values()
-            .map(|tx| tx.read().unwrap().clone())
+            .map(|tx| tx.read().unwrap().clone().into())
             .collect();
         <span class="prelude-val">Ok</span>(Box::new(iter.into_iter()))
     }
@@ -504,19 +427,19 @@
             Transaction::builder()
                 .client_id(<span class="number">1</span>)
                 .transaction_id(<span class="number">1</span>)
-                .amount(<span class="number">1.0</span>)
+                .amount(<span class="number">1</span>)
                 .ty(TransactionType::Deposit)
                 .build(),
             Transaction::builder()
                 .client_id(<span class="number">1</span>)
                 .transaction_id(<span class="number">2</span>)
-                .amount(<span class="number">1.0</span>)
+                .amount(<span class="number">1</span>)
                 .ty(TransactionType::Deposit)
                 .build(),
             Transaction::builder()
                 .client_id(<span class="number">2</span>)
                 .transaction_id(<span class="number">1</span>)
-                .amount(<span class="number">10.0</span>)
+                .amount(<span class="number">10</span>)
                 .ty(TransactionType::Deposit)
                 .build(),
             Transaction::builder()
@@ -567,30 +490,17 @@
         <span class="kw">let </span>transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(<span class="number">1.0</span>)
+            .amount(<span class="number">1</span>)
             .ty(TransactionType::Deposit)
             .build();
-
-        <span class="comment">// Add an existing transaction
-        </span>state
-            .tx_by_id
-            .write()
-            .unwrap()
-            .insert(transaction_id, RwLock::new(<span class="macro">vec!</span>[transaction.clone()]));
 
         <span class="kw">let </span>result = state.process(<span class="kw-2">&amp;</span>transaction);
 
         <span class="macro">assert!</span>(result.is_ok());
 
         <span class="kw">let </span>tx_by_client = state.tx_state_by_client.read().unwrap();
-        <span class="kw">let </span>tx_by_id = state.tx_by_id.read().unwrap();
 
         <span class="macro">assert_eq!</span>(tx_by_client.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(tx_by_id.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(
-            tx_by_id.get(<span class="kw-2">&amp;</span>transaction_id).unwrap().read().unwrap().len(),
-            <span class="number">2
-        </span>);
     }
 
     <span class="attr">#[test]
@@ -601,7 +511,7 @@
         <span class="kw">let </span>transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(<span class="number">1.0</span>)
+            .amount(<span class="number">1</span>)
             .ty(TransactionType::Deposit)
             .build();
 
@@ -610,14 +520,8 @@
         <span class="macro">assert!</span>(result.is_ok());
 
         <span class="kw">let </span>tx_by_client = state.tx_state_by_client.read().unwrap();
-        <span class="kw">let </span>tx_by_id = state.tx_by_id.read().unwrap();
 
         <span class="macro">assert_eq!</span>(tx_by_client.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(tx_by_id.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(
-            tx_by_id.get(<span class="kw-2">&amp;</span>transaction_id).unwrap().read().unwrap().len(),
-            <span class="number">1
-        </span>);
     }
 
     <span class="attr">#[test]
@@ -628,21 +532,13 @@
         <span class="kw">let </span>transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(<span class="number">1.0</span>)
+            .amount(<span class="number">1</span>)
             .ty(TransactionType::Deposit)
             .build();
 
         <span class="kw">let </span>result = state.process(<span class="kw-2">&amp;</span>transaction);
 
         <span class="macro">assert!</span>(result.is_ok());
-
-        <span class="kw">let </span>tx_by_id = state.tx_by_id.read().unwrap();
-
-        <span class="macro">assert_eq!</span>(tx_by_id.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(
-            tx_by_id.get(<span class="kw-2">&amp;</span>transaction_id).unwrap().read().unwrap().len(),
-            <span class="number">1
-        </span>);
     }
 
     <span class="attr">#[test]
@@ -653,7 +549,7 @@
         <span class="kw">let </span>transaction = Transaction::builder()
             .client_id(client_id)
             .transaction_id(transaction_id)
-            .amount(<span class="number">1.0</span>)
+            .amount(<span class="number">1</span>)
             .ty(TransactionType::Resolve)
             .build();
 
@@ -662,10 +558,8 @@
         <span class="macro">assert!</span>(result.is_ok());
 
         <span class="kw">let </span>tx_by_client = state.tx_state_by_client.read().unwrap();
-        <span class="kw">let </span>tx_by_id = state.tx_by_id.read().unwrap();
 
         <span class="macro">assert_eq!</span>(tx_by_client.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(tx_by_id.len(), <span class="number">0</span>);
     }
 }
 </code></pre></div></section></main></body></html>

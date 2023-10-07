@@ -31,13 +31,15 @@
 <a href="#31" id="31">31</a>
 <a href="#32" id="32">32</a>
 <a href="#33" id="33">33</a>
+<a href="#34" id="34">34</a>
+<a href="#35" id="35">35</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Contains the `PaymentEngine` trait definition.
 </span><span class="kw">mod </span>memory;
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">use </span>mockall::{automock, predicate::<span class="kw-2">*</span>};
 
-<span class="kw">use crate</span>::{Transaction, TransactionError, TransactionResult};
+<span class="kw">use crate</span>::{Transaction, TransactionError, TransactionResultSummary};
 
 <span class="doccomment">/// Trait representing a payment engine. `PaymentEngine` is responsible for processing transactions
 /// one by one and keeping track of them in a `TransactionResult` per Client Account.
@@ -59,8 +61,10 @@
     ///
     /// # Returns
     ///
-    /// Returns a `Iterator` of `TransactionResult` if there was no error representing the summary of the processed transactions.
-    </span><span class="kw">fn </span>summary(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>Iterator&lt;Item = TransactionResult&gt;&gt;, TransactionError&gt;;
+    /// Returns a `Iterator` of `TransactionResultSummary` if there was no error representing the summary of the processed transactions.
+    </span><span class="kw">fn </span>summary(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>Iterator&lt;Item = TransactionResultSummary&gt;&gt;, TransactionError&gt;;
 }
 
 <span class="kw">pub use </span>memory::MemoryThreadSafePaymentEngine;

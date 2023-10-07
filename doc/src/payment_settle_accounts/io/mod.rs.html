@@ -50,7 +50,7 @@
 
 <span class="kw">use </span><span class="kw">crate</span>::Transaction;
 <span class="kw">use </span><span class="kw">crate</span>::TransactionError;
-<span class="kw">use </span><span class="kw">crate</span>::TransactionResult;
+<span class="kw">use </span><span class="kw">crate</span>::TransactionResultSummary;
 
 <span class="kw">pub trait </span>Source {
     <span class="kw">fn </span>read(
@@ -74,11 +74,11 @@
 
 <span class="attr">#[cfg_attr(test, automock)]
 </span><span class="kw">pub trait </span>Sink {
-    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, record: TransactionResult) -&gt; <span class="prelude-ty">Result</span>&lt;(), TransactionError&gt;;
+    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, record: TransactionResultSummary) -&gt; <span class="prelude-ty">Result</span>&lt;(), TransactionError&gt;;
 }
 
 <span class="kw">impl </span>Sink <span class="kw">for </span>CSVTransactionResultStdoutWriter {
-    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, record: TransactionResult) -&gt; <span class="prelude-ty">Result</span>&lt;(), TransactionError&gt; {
+    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, record: TransactionResultSummary) -&gt; <span class="prelude-ty">Result</span>&lt;(), TransactionError&gt; {
         <span class="self">self</span>.write(record)
     }
 }

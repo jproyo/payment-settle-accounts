@@ -652,97 +652,16 @@
 <a href="#652" id="652">652</a>
 <a href="#653" id="653">653</a>
 <a href="#654" id="654">654</a>
-<a href="#655" id="655">655</a>
-<a href="#656" id="656">656</a>
-<a href="#657" id="657">657</a>
-<a href="#658" id="658">658</a>
-<a href="#659" id="659">659</a>
-<a href="#660" id="660">660</a>
-<a href="#661" id="661">661</a>
-<a href="#662" id="662">662</a>
-<a href="#663" id="663">663</a>
-<a href="#664" id="664">664</a>
-<a href="#665" id="665">665</a>
-<a href="#666" id="666">666</a>
-<a href="#667" id="667">667</a>
-<a href="#668" id="668">668</a>
-<a href="#669" id="669">669</a>
-<a href="#670" id="670">670</a>
-<a href="#671" id="671">671</a>
-<a href="#672" id="672">672</a>
-<a href="#673" id="673">673</a>
-<a href="#674" id="674">674</a>
-<a href="#675" id="675">675</a>
-<a href="#676" id="676">676</a>
-<a href="#677" id="677">677</a>
-<a href="#678" id="678">678</a>
-<a href="#679" id="679">679</a>
-<a href="#680" id="680">680</a>
-<a href="#681" id="681">681</a>
-<a href="#682" id="682">682</a>
-<a href="#683" id="683">683</a>
-<a href="#684" id="684">684</a>
-<a href="#685" id="685">685</a>
-<a href="#686" id="686">686</a>
-<a href="#687" id="687">687</a>
-<a href="#688" id="688">688</a>
-<a href="#689" id="689">689</a>
-<a href="#690" id="690">690</a>
-<a href="#691" id="691">691</a>
-<a href="#692" id="692">692</a>
-<a href="#693" id="693">693</a>
-<a href="#694" id="694">694</a>
-<a href="#695" id="695">695</a>
-<a href="#696" id="696">696</a>
-<a href="#697" id="697">697</a>
-<a href="#698" id="698">698</a>
-<a href="#699" id="699">699</a>
-<a href="#700" id="700">700</a>
-<a href="#701" id="701">701</a>
-<a href="#702" id="702">702</a>
-<a href="#703" id="703">703</a>
-<a href="#704" id="704">704</a>
-<a href="#705" id="705">705</a>
-<a href="#706" id="706">706</a>
-<a href="#707" id="707">707</a>
-<a href="#708" id="708">708</a>
-<a href="#709" id="709">709</a>
-<a href="#710" id="710">710</a>
-<a href="#711" id="711">711</a>
-<a href="#712" id="712">712</a>
-<a href="#713" id="713">713</a>
-<a href="#714" id="714">714</a>
-<a href="#715" id="715">715</a>
-<a href="#716" id="716">716</a>
-<a href="#717" id="717">717</a>
-<a href="#718" id="718">718</a>
-<a href="#719" id="719">719</a>
-<a href="#720" id="720">720</a>
-<a href="#721" id="721">721</a>
-<a href="#722" id="722">722</a>
-<a href="#723" id="723">723</a>
-<a href="#724" id="724">724</a>
-<a href="#725" id="725">725</a>
-<a href="#726" id="726">726</a>
-<a href="#727" id="727">727</a>
-<a href="#728" id="728">728</a>
-<a href="#729" id="729">729</a>
-<a href="#730" id="730">730</a>
-<a href="#731" id="731">731</a>
-<a href="#732" id="732">732</a>
-<a href="#733" id="733">733</a>
-<a href="#734" id="734">734</a>
-<a href="#735" id="735">735</a>
-<a href="#736" id="736">736</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Contains the entities used in the application.
-</span><span class="kw">use </span>std::fmt;
-<span class="kw">use </span>std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
+
+</span><span class="kw">use </span>core::fmt;
+<span class="kw">use </span>std::collections::HashMap;
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">use </span>fake::Dummy;
 
-<span class="kw">use </span>serde::de::Error;
-<span class="kw">use </span>serde::{Deserialize, Serialize, Serializer};
+<span class="kw">use </span>::serde::{Deserialize, Serialize};
+<span class="kw">use </span>rust_decimal::Decimal;
 <span class="kw">use </span>typed_builder::TypedBuilder;
 
 <span class="kw">use </span><span class="kw">crate</span>::TransactionError;
@@ -768,105 +687,6 @@
     </span>Chargeback,
 }
 
-<span class="doccomment">/// Represents a monetary value in cents denomination to avoid floating point precissions issues.
-</span><span class="attr">#[derive(PartialEq, Clone, Eq, Hash, PartialOrd, Ord, Copy)]
-#[cfg_attr(test, derive(Dummy))]
-</span><span class="kw">pub struct </span>CentDenomination(i64);
-
-<span class="kw">impl </span>Deref <span class="kw">for </span>CentDenomination {
-    <span class="kw">type </span>Target = i64;
-
-    <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0
-    </span>}
-}
-
-<span class="kw">impl </span>AddAssign <span class="kw">for </span>CentDenomination {
-    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, other: <span class="self">Self</span>) {
-        <span class="self">self</span>.<span class="number">0 </span>+= other.<span class="number">0</span>;
-    }
-}
-
-<span class="kw">impl </span>SubAssign <span class="kw">for </span>CentDenomination {
-    <span class="kw">fn </span>sub_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, other: <span class="self">Self</span>) {
-        <span class="self">self</span>.<span class="number">0 </span>-= other.<span class="number">0</span>;
-    }
-}
-
-<span class="kw">impl </span>Sub <span class="kw">for </span>CentDenomination {
-    <span class="kw">type </span>Output = <span class="self">Self</span>;
-
-    <span class="kw">fn </span>sub(<span class="self">self</span>, other: <span class="self">Self</span>) -&gt; <span class="self">Self</span>::Output {
-        CentDenomination(<span class="self">self</span>.<span class="number">0 </span>- other.<span class="number">0</span>)
-    }
-}
-
-<span class="kw">impl </span>Add <span class="kw">for </span>CentDenomination {
-    <span class="kw">type </span>Output = <span class="self">Self</span>;
-
-    <span class="kw">fn </span>add(<span class="self">self</span>, other: <span class="self">Self</span>) -&gt; <span class="self">Self</span>::Output {
-        CentDenomination(<span class="self">self</span>.<span class="number">0 </span>+ other.<span class="number">0</span>)
-    }
-}
-
-<span class="kw">impl </span>fmt::Debug <span class="kw">for </span>CentDenomination {
-    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; fmt::Result {
-        <span class="macro">write!</span>(f, <span class="string">&quot;{:.4}&quot;</span>, <span class="self">self</span>.as_f64())
-    }
-}
-
-<span class="kw">impl </span>Serialize <span class="kw">for </span>CentDenomination {
-    <span class="kw">fn </span>serialize&lt;S&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, serializer: S) -&gt; <span class="prelude-ty">Result</span>&lt;S::Ok, S::Error&gt;
-    <span class="kw">where
-        </span>S: Serializer,
-    {
-        <span class="kw">let </span>formatted_value = <span class="macro">format!</span>(<span class="string">&quot;{:.4}&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.as_f64());
-        serializer.serialize_str(<span class="kw-2">&amp;</span>formatted_value)
-    }
-}
-
-<span class="kw">impl</span>&lt;<span class="lifetime">&#39;de</span>&gt; Deserialize&lt;<span class="lifetime">&#39;de</span>&gt; <span class="kw">for </span>CentDenomination {
-    <span class="kw">fn </span>deserialize&lt;D&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;CentDenomination, D::Error&gt;
-    <span class="kw">where
-        </span>D: serde::Deserializer&lt;<span class="lifetime">&#39;de</span>&gt;,
-    {
-        <span class="kw">let </span>s = String::deserialize(deserializer)
-            .map_err(|e| TransactionError::InvalidTransactionAmount(e.to_string()))
-            .map_err(Error::custom)<span class="question-mark">?</span>;
-        <span class="kw">let </span>s = s
-            .parse::&lt;f64&gt;()
-            .map_err(|<span class="kw">_</span>| {
-                TransactionError::InvalidTransactionAmount(<span class="macro">format!</span>(<span class="string">&quot;Cannot parse {:?}&quot;</span>, s))
-            })
-            .map_err(Error::custom)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(CentDenomination::from_f64(s))
-    }
-}
-
-<span class="kw">impl </span>CentDenomination {
-    <span class="doccomment">/// Returns the value as a `f64` representing the monetary value.
-    </span><span class="kw">pub fn </span>as_f64(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; f64 {
-        <span class="self">self</span>.<span class="number">0 </span><span class="kw">as </span>f64 / <span class="number">100.0
-    </span>}
-
-    <span class="doccomment">/// Creates a `CentDenomination` from a `f64` value representing the monetary value.
-    </span><span class="kw">pub fn </span>from_f64(s: f64) -&gt; CentDenomination {
-        CentDenomination((s * <span class="number">100.0</span>) <span class="kw">as </span>i64)
-    }
-}
-
-<span class="kw">impl </span>From&lt;f64&gt; <span class="kw">for </span>CentDenomination {
-    <span class="kw">fn </span>from(s: f64) -&gt; CentDenomination {
-        CentDenomination::from_f64(s)
-    }
-}
-
-<span class="kw">impl </span>From&lt;i64&gt; <span class="kw">for </span>CentDenomination {
-    <span class="kw">fn </span>from(s: i64) -&gt; CentDenomination {
-        CentDenomination(s * <span class="number">100</span>)
-    }
-}
-
 <span class="doccomment">/// Represents a client ID.
 </span><span class="kw">pub type </span>ClientId = u16;
 
@@ -888,7 +708,7 @@
 
     <span class="attr">#[builder(default, setter(strip_option), setter(into))]
     #[serde(rename = <span class="string">&quot;amount&quot;</span>)]
-    </span>amount: <span class="prelude-ty">Option</span>&lt;CentDenomination&gt;,
+    </span>amount: <span class="prelude-ty">Option</span>&lt;Decimal&gt;,
 }
 
 <span class="kw">impl </span>Transaction {
@@ -908,123 +728,214 @@
     }
 
     <span class="doccomment">/// Returns the amount of the transaction.
-    </span><span class="kw">pub fn </span>amount(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CentDenomination&gt; {
+    </span><span class="kw">pub fn </span>amount(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Decimal&gt; {
         <span class="self">self</span>.amount
     }
 
     <span class="doccomment">/// Returns the amount of the transaction or an error if it is missing.
-    </span><span class="kw">pub fn </span>amount_or_err(<span class="kw-2">&amp;</span><span class="self">self</span>, msg: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;CentDenomination, TransactionError&gt; {
-        <span class="self">self</span>.amount()
-            .ok_or_else(|| TransactionError::InvalidTransactionAmount(msg.into()))
+    </span><span class="kw">pub fn </span>amount_or_err(<span class="kw-2">&amp;</span><span class="self">self</span>, msg: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Decimal, TransactionError&gt; {
+        <span class="kw">let </span>amount = <span class="self">self
+            </span>.amount()
+            .ok_or_else(|| TransactionError::InvalidTransactionAmount(msg.into()))<span class="question-mark">?</span>;
+        <span class="kw">if </span>amount &lt; Decimal::ZERO {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InvalidTransactionAmount(
+                <span class="string">&quot;Transaction amount is negative&quot;</span>.into(),
+            ));
+        }
+        <span class="prelude-val">Ok</span>(amount)
+    }
+}
+
+<span class="attr">#[derive(PartialEq, Clone, Debug)]
+#[cfg_attr(test, derive(Dummy))]
+</span><span class="kw">enum </span>TxStatus {
+    Depoit,
+    BeingDisputed,
+}
+
+<span class="attr">#[derive(PartialEq, Clone, Debug)]
+#[cfg_attr(test, derive(Dummy))]
+</span><span class="kw">struct </span>TxTrack {
+    amount: Decimal,
+    status: TxStatus,
+}
+
+<span class="kw">impl </span>TxTrack {
+    <span class="kw">fn </span>new(amount: Decimal) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            amount,
+            status: TxStatus::Depoit,
+        }
     }
 
-    <span class="doccomment">/// Checks if the transaction should be tracked.
-    </span><span class="kw">pub fn </span>should_be_tracked(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-        <span class="macro">matches!</span>(
-            <span class="self">self</span>.ty(),
-            TransactionType::Deposit | TransactionType::Dispute
-        )
+    <span class="kw">fn </span>being_disputed(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
+        <span class="self">self</span>.status == TxStatus::BeingDisputed
     }
 
-    <span class="doccomment">/// Checks if there is a previous dispute for the transaction.
-    </span><span class="kw">fn </span>is_there_previous_dispute(<span class="kw-2">&amp;</span><span class="self">self</span>, transaction_result: <span class="kw-2">&amp;</span>[Transaction]) -&gt; bool {
-        transaction_result.iter().any(|t| {
-            t.ty() == <span class="kw-2">&amp;</span>TransactionType::Dispute &amp;&amp; t.transaction_id() == <span class="self">self</span>.transaction_id()
-        })
-    }
-
-    <span class="doccomment">/// Finds the previous deposit transaction for the given transaction.
-    </span><span class="kw">fn </span>find_previous_deposit&lt;<span class="lifetime">&#39;a</span>, <span class="lifetime">&#39;b</span>&gt;(
-        <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span><span class="self">self</span>,
-        transaction_result: <span class="kw-2">&amp;</span><span class="lifetime">&#39;b </span>[Transaction],
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Transaction&gt;
-    <span class="kw">where
-        </span><span class="lifetime">&#39;b</span>: <span class="lifetime">&#39;a</span>, <span class="comment">// &#39;b lives longer than &#39;a
-    </span>{
-        transaction_result.iter().find(|t| {
-            t.ty() == <span class="kw-2">&amp;</span>TransactionType::Deposit &amp;&amp; t.transaction_id() == <span class="self">self</span>.transaction_id()
-        })
+    <span class="kw">fn </span>amount(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Decimal {
+        <span class="self">self</span>.amount
     }
 }
 
 <span class="doccomment">/// Represents the result of a transaction.
-</span><span class="attr">#[derive(PartialEq, TypedBuilder, Clone, Debug)]
+</span><span class="attr">#[derive(PartialEq, Clone)]
 #[cfg_attr(test, derive(Dummy))]
-</span><span class="kw">pub struct </span>TransactionResult {
+</span><span class="kw">pub struct </span>Account {
     client_id: ClientId,
-    <span class="attr">#[builder(setter(into))]
-    </span>available: CentDenomination,
-    <span class="attr">#[builder(setter(into))]
-    </span>held: CentDenomination,
-    <span class="attr">#[builder(default)]
-    </span>locked: bool,
+    available: Decimal,
+    held: Decimal,
+    locked: bool,
+    previous_deposits: HashMap&lt;TxId, TxTrack&gt;,
 }
 
-<span class="kw">impl </span>TransactionResult {
+<span class="kw">impl </span>fmt::Debug <span class="kw">for </span>Account {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; fmt::Result {
+        <span class="macro">write!</span>(
+            f,
+            <span class="string">&quot;client: {}, available: {}, held: {}, total: {}, locked: {}&quot;</span>,
+            <span class="self">self</span>.client_id,
+            <span class="self">self</span>.available,
+            <span class="self">self</span>.held,
+            <span class="self">self</span>.available + <span class="self">self</span>.held,
+            <span class="self">self</span>.locked,
+        )
+    }
+}
+
+<span class="kw">impl </span>Account {
+    <span class="doccomment">/// Creates a new transaction result with default settle in 0 for `client_id`.
+    </span><span class="kw">pub fn </span>new(client_id: ClientId) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            client_id,
+            available: Decimal::ZERO,
+            held: Decimal::ZERO,
+            locked: <span class="bool-val">false</span>,
+            previous_deposits: HashMap::new(),
+        }
+    }
+
+    <span class="kw">pub fn </span>create_with(
+        client_id: ClientId,
+        available: Decimal,
+        held: Decimal,
+        locked: bool,
+    ) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            client_id,
+            available,
+            held,
+            locked,
+            previous_deposits: HashMap::new(),
+        }
+    }
+
     <span class="doccomment">/// Processes a transaction and updates the transaction result accordingly.
-    </span><span class="kw">pub fn </span>process(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        transaction: <span class="kw-2">&amp;</span>Transaction,
-        transactions: <span class="kw-2">&amp;</span>[Transaction],
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), TransactionError&gt; {
+    </span><span class="kw">pub fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, transaction: <span class="kw-2">&amp;</span>Transaction) -&gt; <span class="prelude-ty">Result</span>&lt;(), TransactionError&gt; {
+        <span class="kw">if </span><span class="self">self</span>.locked {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::AccountLocked(transaction.clone()));
+        }
         <span class="kw">match </span>transaction.ty() {
             TransactionType::Deposit =&gt; {
                 <span class="kw">let </span>amount = transaction.amount_or_err(<span class="string">&quot;Deposit amount is missing&quot;</span>)<span class="question-mark">?</span>;
+                <span class="kw">if </span><span class="self">self</span>.exists(transaction) {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::DuplicateTransaction(transaction.clone()));
+                }
                 <span class="self">self</span>.available += amount;
+                <span class="self">self</span>.previous_deposits
+                    .insert(transaction.transaction_id(), TxTrack::new(amount));
             }
             TransactionType::Withdrawal =&gt; {
                 <span class="kw">let </span>amount = transaction.amount_or_err(<span class="string">&quot;Withdrawal amount is missing&quot;</span>)<span class="question-mark">?</span>;
+                <span class="kw">if </span><span class="self">self</span>.exists(transaction) {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::DuplicateTransaction(transaction.clone()));
+                }
                 <span class="kw">if </span><span class="self">self</span>.available &gt;= amount {
                     <span class="self">self</span>.available -= amount;
                 } <span class="kw">else </span>{
-                    <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InsufficientFunds);
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InsufficientFunds(transaction.clone()));
                 }
             }
             TransactionType::Dispute =&gt; {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(deposit) = transaction.find_previous_deposit(transactions) {
-                    <span class="kw">let </span>amount = deposit.amount_or_err(<span class="string">&quot;Deposit amount is missing&quot;</span>)<span class="question-mark">?</span>;
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref mut </span>tx) = <span class="self">self
+                    </span>.previous_deposits
+                    .get_mut(<span class="kw-2">&amp;</span>transaction.transaction_id())
+                {
+                    <span class="kw">if </span>tx.being_disputed() {
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::TransactionBeingDisputed(
+                            transaction.clone(),
+                        ));
+                    }
+                    <span class="kw">let </span>amount = tx.amount();
                     <span class="kw">if </span><span class="self">self</span>.available &gt;= amount {
                         <span class="self">self</span>.available -= amount;
                         <span class="self">self</span>.held += amount;
+                        tx.status = TxStatus::BeingDisputed;
                     } <span class="kw">else </span>{
                         <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InconsistenceBalance(
                             <span class="string">&quot;Attempt to dispute more than available&quot;</span>.into(),
+                            transaction.clone(),
+                        ));
+                    }
+                } <span class="kw">else </span>{
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::CannotDisputeWithoutDeposit(
+                        transaction.clone(),
+                    ));
+                }
+            }
+            TransactionType::Resolve =&gt; {
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(tx) = <span class="self">self
+                    </span>.previous_deposits
+                    .get_mut(<span class="kw-2">&amp;</span>transaction.transaction_id())
+                {
+                    <span class="kw">if </span>!tx.being_disputed() {
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::CannotResolveWithoutDispute(
+                            transaction.clone(),
+                        ));
+                    }
+                    <span class="kw">let </span>amount = tx.amount();
+                    <span class="kw">if </span><span class="self">self</span>.held &gt;= amount {
+                        <span class="self">self</span>.available += amount;
+                        <span class="self">self</span>.held -= amount;
+                        tx.status = TxStatus::Depoit;
+                    } <span class="kw">else </span>{
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InconsistenceBalance(
+                            <span class="string">&quot;Attempt to resolve more than held&quot;</span>.into(),
+                            transaction.clone(),
                         ));
                     }
                 }
             }
-            TransactionType::Resolve =&gt; {
-                <span class="kw">if </span>transaction.is_there_previous_dispute(transactions) {
-                    <span class="kw">if let </span><span class="prelude-val">Some</span>(deposit) = transaction.find_previous_deposit(transactions) {
-                        <span class="kw">let </span>amount = deposit.amount_or_err(<span class="string">&quot;Deposit amount is missing&quot;</span>)<span class="question-mark">?</span>;
-                        <span class="kw">if </span><span class="self">self</span>.held &gt;= amount {
-                            <span class="self">self</span>.available += amount;
-                            <span class="self">self</span>.held -= amount;
-                        } <span class="kw">else </span>{
-                            <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InconsistenceBalance(
-                                <span class="string">&quot;Attempt to resolve more than held&quot;</span>.into(),
-                            ));
-                        }
-                    }
-                }
-            }
             TransactionType::Chargeback =&gt; {
-                <span class="kw">if </span>transaction.is_there_previous_dispute(transactions) {
-                    <span class="kw">if let </span><span class="prelude-val">Some</span>(deposit) = transaction.find_previous_deposit(transactions) {
-                        <span class="kw">let </span>amount = deposit.amount_or_err(<span class="string">&quot;Deposit amount is missing&quot;</span>)<span class="question-mark">?</span>;
-                        <span class="kw">if </span><span class="self">self</span>.held &gt;= amount {
-                            <span class="self">self</span>.held -= amount;
-                            <span class="self">self</span>.locked = <span class="bool-val">true</span>;
-                        } <span class="kw">else </span>{
-                            <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InconsistenceBalance(
-                                <span class="string">&quot;Attempt to chargeback more than held&quot;</span>.into(),
-                            ));
-                        }
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref mut </span>tx) = <span class="self">self
+                    </span>.previous_deposits
+                    .get_mut(<span class="kw-2">&amp;</span>transaction.transaction_id())
+                {
+                    <span class="kw">if </span>!tx.being_disputed() {
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::CannotChargebackWithoutDispute(
+                            transaction.clone(),
+                        ));
+                    }
+                    <span class="kw">let </span>amount = tx.amount();
+                    <span class="kw">if </span><span class="self">self</span>.held &gt;= amount {
+                        <span class="self">self</span>.held -= amount;
+                        <span class="self">self</span>.locked = <span class="bool-val">true</span>;
+                    } <span class="kw">else </span>{
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(TransactionError::InconsistenceBalance(
+                            <span class="string">&quot;Attempt to chargeback more than held&quot;</span>.into(),
+                            transaction.clone(),
+                        ));
                     }
                 }
             }
         }
         <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="comment">// Verify if the transaction was already processed with same id and type
+    </span><span class="kw">fn </span>exists(<span class="kw-2">&amp;</span><span class="self">self</span>, transaction: <span class="kw-2">&amp;</span>Transaction) -&gt; bool {
+        <span class="self">self</span>.previous_deposits
+            .get(<span class="kw-2">&amp;</span>transaction.transaction_id())
+            .is_some()
     }
 
     <span class="doccomment">/// Returns the client ID associated with the transaction result.
@@ -1033,17 +944,17 @@
     }
 
     <span class="doccomment">/// Returns the available amount in the transaction result.
-    </span><span class="kw">pub fn </span>available(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CentDenomination {
+    </span><span class="kw">pub fn </span>available(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Decimal {
         <span class="self">self</span>.available
     }
 
     <span class="doccomment">/// Returns the held amount in the transaction result.
-    </span><span class="kw">pub fn </span>held(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CentDenomination {
+    </span><span class="kw">pub fn </span>held(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Decimal {
         <span class="self">self</span>.held
     }
 
     <span class="doccomment">/// Returns the total amount in the transaction result.
-    </span><span class="kw">pub fn </span>total(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CentDenomination {
+    </span><span class="kw">pub fn </span>total(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Decimal {
         <span class="self">self</span>.held + <span class="self">self</span>.available
     }
 
@@ -1052,62 +963,50 @@
         <span class="self">self</span>.locked
     }
 }
+
+<span class="attr">#[derive(Debug, Serialize, PartialEq)]
+#[cfg_attr(test, derive(Dummy))]
+</span><span class="kw">pub struct </span>TransactionResultSummary {
+    client: ClientId,
+    <span class="attr">#[serde(with = <span class="string">&quot;rust_decimal::serde::str&quot;</span>)]
+    </span>available: Decimal,
+    <span class="attr">#[serde(with = <span class="string">&quot;rust_decimal::serde::str&quot;</span>)]
+    </span>held: Decimal,
+    <span class="attr">#[serde(with = <span class="string">&quot;rust_decimal::serde::str&quot;</span>)]
+    </span>total: Decimal,
+    locked: bool,
+}
+
+<span class="kw">impl </span>From&lt;Account&gt; <span class="kw">for </span>TransactionResultSummary {
+    <span class="doccomment">/// Converts a `TransactionResult` into a `TransactionResultCSV`.
+    </span><span class="kw">fn </span>from(result: Account) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            client: result.client_id(),
+            available: result.available().round_dp(<span class="number">4</span>),
+            held: result.held().round_dp(<span class="number">4</span>),
+            total: result.total().round_dp(<span class="number">4</span>),
+            locked: result.locked(),
+        }
+    }
+}
+
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
+    <span class="kw">use </span>rust_decimal_macros::dec;
+
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
-
-    <span class="attr">#[test]
-    </span><span class="kw">fn </span>test_deserialize_cent_denomination() {
-        <span class="kw">let </span>to_parse = [
-            <span class="string">&quot;\&quot;0.5\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0.50\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0.500\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0.5000\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;12.2333232\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;12.23332\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;12.23\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;12.2\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0.0\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0.00\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0.000\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;0.0000\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;2131233212\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;2131233\&quot;&quot;</span>,
-            <span class="string">&quot;\&quot;1233\&quot;&quot;</span>,
-        ];
-        <span class="kw">for </span>s <span class="kw">in </span>to_parse.iter() {
-            <span class="kw">let </span>deserializer = <span class="kw-2">&amp;mut </span>serde_json::Deserializer::from_str(s);
-            <span class="kw">let </span>result = CentDenomination::deserialize(deserializer);
-            <span class="macro">assert!</span>(result.is_ok());
-        }
-    }
-
-    <span class="attr">#[test]
-    </span><span class="kw">fn </span>test_deserialize_cent_denomination_error() {
-        <span class="kw">let </span>to_parse = [<span class="string">&quot;\&quot;0.0.\&quot;&quot;</span>, <span class="string">&quot;\&quot;0.0.0\&quot;&quot;</span>, <span class="string">&quot;\&quot;45.45.45\&quot;&quot;</span>, <span class="string">&quot;Not a number&quot;</span>];
-        <span class="kw">for </span>s <span class="kw">in </span>to_parse.iter() {
-            <span class="kw">let </span>deserializer = <span class="kw-2">&amp;mut </span>serde_json::Deserializer::from_str(s);
-            <span class="macro">assert!</span>(CentDenomination::deserialize(deserializer).is_err());
-        }
-    }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_process_deposit() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
 
         <span class="macro">assert!</span>(result.is_ok());
         <span class="kw">let </span>expected = <span class="number">12</span>.into();
@@ -1117,20 +1016,14 @@
     </span><span class="kw">fn </span>test_process_withdrawal_with_sufficient_funds() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>withdrawal = Transaction::builder()
             .ty(TransactionType::Withdrawal)
@@ -1139,7 +1032,7 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>withdrawal, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>withdrawal);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(transaction_result.available, <span class="number">0</span>.into());
     }
@@ -1148,33 +1041,27 @@
     </span><span class="kw">fn </span>test_process_withdrawal_with_insufficient_funds() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>withdrawal = Transaction::builder()
             .ty(TransactionType::Withdrawal)
-            .amount(<span class="number">12.1</span>)
+            .amount(<span class="macro">dec!</span>(<span class="number">12.1</span>))
             .transaction_id(<span class="number">2</span>)
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>withdrawal, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>withdrawal);
         <span class="macro">assert!</span>(result.is_err());
         <span class="macro">assert_eq!</span>(transaction_result.available, <span class="number">12</span>.into());
         <span class="kw">match </span>result {
-            <span class="prelude-val">Err</span>(TransactionError::InsufficientFunds) =&gt; {}
+            <span class="prelude-val">Err</span>(TransactionError::InsufficientFunds(<span class="kw">_</span>)) =&gt; {}
             <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">&quot;Unexpected error&quot;</span>),
         }
     }
@@ -1183,20 +1070,14 @@
     </span><span class="kw">fn </span>test_process_dispute_with_valid_deposit() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="macro">dec!</span>(<span class="number">12.0</span>))
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -1204,7 +1085,7 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">0</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">12</span>.into());
@@ -1214,20 +1095,14 @@
     </span><span class="kw">fn </span>test_process_dispute_with_invalid_deposit() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="macro">dec!</span>(<span class="number">12.0</span>))
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -1235,8 +1110,8 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute, <span class="kw-2">&amp;</span>transactions);
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute);
+        <span class="macro">assert!</span>(result.is_err());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">12</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">0</span>.into());
     }
@@ -1245,20 +1120,14 @@
     </span><span class="kw">fn </span>test_process_resolve_with_valid_dispute() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="macro">dec!</span>(<span class="number">12.0</span>))
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -1266,9 +1135,8 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(dispute);
 
         <span class="kw">let </span>resolve = Transaction::builder()
             .ty(TransactionType::Resolve)
@@ -1276,7 +1144,7 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>resolve, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>resolve);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">12</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">0</span>.into());
@@ -1285,20 +1153,14 @@
     </span><span class="kw">fn </span>test_process_dispute_with_not_enough_available() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>withdrawal = Transaction::builder()
             .ty(TransactionType::Withdrawal)
@@ -1307,7 +1169,7 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>withdrawal, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>withdrawal);
         <span class="macro">assert!</span>(result.is_ok());
 
         <span class="kw">let </span>dispute = Transaction::builder()
@@ -1316,12 +1178,12 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute);
         <span class="macro">assert!</span>(result.is_err());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">7</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">0</span>.into());
         <span class="kw">match </span>result {
-            <span class="prelude-val">Err</span>(TransactionError::InconsistenceBalance(<span class="kw">_</span>)) =&gt; {}
+            <span class="prelude-val">Err</span>(TransactionError::InconsistenceBalance(..)) =&gt; {}
             <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">&quot;Unexpected error&quot;</span>),
         }
     }
@@ -1330,20 +1192,14 @@
     </span><span class="kw">fn </span>test_process_resolve_with_no_dispute() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>resolve = Transaction::builder()
             .ty(TransactionType::Resolve)
@@ -1351,8 +1207,8 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>resolve, <span class="kw-2">&amp;</span>transactions);
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>resolve);
+        <span class="macro">assert!</span>(result.is_err());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">12</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">0</span>.into());
     }
@@ -1361,20 +1217,14 @@
     </span><span class="kw">fn </span>test_process_resolve_with_no_funds() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>resolve = Transaction::builder()
             .ty(TransactionType::Resolve)
@@ -1382,8 +1232,8 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>resolve, <span class="kw-2">&amp;</span>transactions);
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>resolve);
+        <span class="macro">assert!</span>(result.is_err());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">12</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">0</span>.into());
     }
@@ -1392,20 +1242,14 @@
     </span><span class="kw">fn </span>test_process_chargeback_with_valid_dispute() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -1413,9 +1257,8 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(dispute);
 
         <span class="kw">let </span>chargeback = Transaction::builder()
             .ty(TransactionType::Chargeback)
@@ -1423,7 +1266,7 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>chargeback, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>chargeback);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">0</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">0</span>.into());
@@ -1433,20 +1276,14 @@
     </span><span class="kw">fn </span>test_process_chargeback_with_no_dispute() {
         <span class="kw">let </span>deposit = Transaction::builder()
             .ty(TransactionType::Deposit)
-            .amount(<span class="number">12.0</span>)
+            .amount(<span class="number">12</span>)
             .transaction_id(<span class="number">1</span>)
             .client_id(<span class="number">1</span>)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>transactions = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = TransactionResult::builder()
-            .client_id(<span class="number">1</span>)
-            .available(<span class="number">0.0</span>)
-            .held(<span class="number">0.0</span>)
-            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>transaction_result = Account::new(<span class="number">1</span>);
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>deposit);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(deposit);
 
         <span class="kw">let </span>dispute = Transaction::builder()
             .ty(TransactionType::Dispute)
@@ -1454,9 +1291,8 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>dispute);
         <span class="macro">assert!</span>(result.is_ok());
-        transactions.push(dispute);
 
         <span class="kw">let </span>chargeback = Transaction::builder()
             .ty(TransactionType::Chargeback)
@@ -1464,7 +1300,7 @@
             .client_id(<span class="number">1</span>)
             .build();
 
-        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>chargeback, <span class="kw-2">&amp;</span>transactions);
+        <span class="kw">let </span>result = transaction_result.process(<span class="kw-2">&amp;</span>chargeback);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(transaction_result.available(), <span class="number">0</span>.into());
         <span class="macro">assert_eq!</span>(transaction_result.held(), <span class="number">12</span>.into());

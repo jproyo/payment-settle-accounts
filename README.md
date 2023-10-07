@@ -78,6 +78,14 @@ When using **Docker**, you need to mount your local disk as a volume. If your **
 > docker run -v /home/your_user/data/my_csv.csv:/app/data payments /app/data/my_csv.csv
 ```
 
+### Run with logging
+
+```shell
+> RUST_LOG=warn cargo run -- my_path_to_my.csv > my_result.csv
+```
+
+> NOTE: Running with logging enable will redirect logging output to the stderr. Only results of the transaction processor will be redirected to stdout in order to have control on the stdout and stderr redirection for the user.
+
 ---
 
 ## Design Documentation
@@ -161,13 +169,11 @@ Here are some of the assumptions that were made during the development of this s
 
 - AS_4: It is assumed that the following errors would stop the program rather than continuing to process transactions, as these indicate incorrect sets of transactions that need verification:
 
-    - **Insufficient Funds**: If a withdrawal is requested without sufficient balance.
-    - **Inconsistencies in Balance**: This error may occur if, for example, there is a deposit of 10, followed by a withdrawal of 5, and then a dispute of the initial 10. This would result in an error because the deposit cannot be claimed. This assumption is made because it is not specified in the original problem.
     - Any parse error of the CSV.
     - Any other unexpected errors.
     - **Overflow in numbers** is not controlled, as we rely on the runtime system and compiler to handle this.
 
-- AS_5: No logging or observability mechanisms are implemented to simplify development and rely on testing.
+- AS_5: Logging is implemented only to track skipped transactions because of logical errors, like wrong dispute insufficient founds, etc. If you want to activate logging, which is going to be redirected to `stderr` you should run program with the indications [above](#run-with-logging)
 
 ### Extensibility and Maintainability
 
@@ -225,7 +231,11 @@ let pipeline: Box<dyn Pipeline> = Box::new(TransactionPipeline {
 ### Error Handling
 
 All error handling are based on `thiserror` crate using an enum and relying on `Result` type.
-All the errors are propagated to the `main` function and if an error is match there we panic. This is because errors that allow us to continue like a `Dispute` that does not have a `Deposit` are not returned as an `Err` but as an `Ok`.
+There are 2 kind of errors:
+
+- **Reporting Errors**: This errors are logical errors that allow us to continue with the execution of the program but we want to logging some how without breaking the execution. An example of this, it is a transaction that wants to withdraw but there are not enough funds. In this cases we are going to handle those errors and report it with `env_logger` crate in `warn` mode. If `RUST_LOG` env variable is set the error will be display in the console but not redirected to the `stdout`, only to the `stderr`. Check [here](#run-with-logging).
+
+- **Unexpected Errors**: This errors will not be handle and it will be propagated to the main function. Some example of this kind of errors are completely wrong formatted CSV, or some OS Signal like SIGTERM or anyother unexpected.
 
 ### Testing
 
@@ -237,7 +247,7 @@ I used to have `proptest` configured with some cases but I removed it because it
 ## Future Work
 This exercise left many opportunities for improving the current solution that could be addressed in future implementations:
 
-- Implement logging and observability.
+- Implement observability.
 - Implement partitioning and multithreading to process transactions concurrently in chunks.
 - Implement different `PaymentEngine` implementations to reduce reliance on in-memory storage.
 

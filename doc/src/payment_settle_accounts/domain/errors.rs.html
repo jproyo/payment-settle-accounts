@@ -29,30 +29,58 @@
 <a href="#29" id="29">29</a>
 <a href="#30" id="30">30</a>
 <a href="#31" id="31">31</a>
+<a href="#32" id="32">32</a>
+<a href="#33" id="33">33</a>
+<a href="#34" id="34">34</a>
+<a href="#35" id="35">35</a>
+<a href="#36" id="36">36</a>
+<a href="#37" id="37">37</a>
+<a href="#38" id="38">38</a>
+<a href="#39" id="39">39</a>
+<a href="#40" id="40">40</a>
+<a href="#41" id="41">41</a>
+<a href="#42" id="42">42</a>
+<a href="#43" id="43">43</a>
+<a href="#44" id="44">44</a>
+<a href="#45" id="45">45</a>
 </pre></div><pre class="rust"><code><span class="comment">// Error type for the transaction processing
 </span><span class="kw">use </span>std::sync::PoisonError;
 
 <span class="kw">use </span>thiserror::Error;
 
+<span class="kw">use </span><span class="kw">crate</span>::Transaction;
+
 <span class="doccomment">/// Error type for the transaction processing based on thiserror crate
 </span><span class="attr">#[derive(Error, Debug)]
 </span><span class="kw">pub enum </span>TransactionError {
-    <span class="attr">#[error(<span class="string">&quot;Invalid transaction id {0}&quot;</span>)]
+    <span class="attr">#[error(<span class="string">&quot;Invalid transaction id [{0}]&quot;</span>)]
     </span>InvalidTransactionId(String),
-    <span class="attr">#[error(<span class="string">&quot;Invalid client id {0}&quot;</span>)]
+    <span class="attr">#[error(<span class="string">&quot;Invalid client id [{0}]&quot;</span>)]
     </span>InvalidClient(String),
-    <span class="attr">#[error(<span class="string">&quot;Invalid transaction type {0}&quot;</span>)]
+    <span class="attr">#[error(<span class="string">&quot;Invalid transaction type [{0}]&quot;</span>)]
     </span>InvalidTransactionType(String),
-    <span class="attr">#[error(<span class="string">&quot;Invalid transaction amount {0}&quot;</span>)]
+    <span class="attr">#[error(<span class="string">&quot;Invalid transaction amount [{0}]&quot;</span>)]
     </span>InvalidTransactionAmount(String),
-    <span class="attr">#[error(<span class="string">&quot;Inconsistence Balance amount {0}&quot;</span>)]
-    </span>InconsistenceBalance(String),
-    <span class="attr">#[error(<span class="string">&quot;Error parsing CSV file - {0}&quot;</span>)]
+    <span class="attr">#[error(<span class="string">&quot;Inconsistence Balance amount for transaction [{0} - {1:?}]&quot;</span>)]
+    </span>InconsistenceBalance(String, Transaction),
+    <span class="attr">#[error(<span class="string">&quot;Error parsing CSV file.\n\n---------------\nOriginal cause:\n---------------\n{0}\n&quot;</span>)]
     </span>CSVError(<span class="attr">#[from] </span>csv::Error),
-    <span class="attr">#[error(<span class="string">&quot;Error synchronizing transactions - {0}&quot;</span>)]
+    <span class="attr">#[error(<span class="string">&quot;Error synchronizing transactions\n\n---------------\nOriginal cause:\n---------------\n{0}\n&quot;</span>)]
     </span>SyncError(String),
-    <span class="attr">#[error(<span class="string">&quot;Infusfficient funds for withdrawal&quot;</span>)]
-    </span>InsufficientFunds,
+    <span class="attr">#[error(<span class="string">&quot;Infusfficient funds for withdrawal transaction [{0:?}]&quot;</span>)]
+    </span>InsufficientFunds(Transaction),
+    <span class="attr">#[error(<span class="string">&quot;Account locked for dispute transaction [{0:?}]&quot;</span>)]
+    </span>AccountLocked(Transaction),
+    <span class="attr">#[error(<span class="string">&quot;Transaction already processed with same id [{0:?}]&quot;</span>)]
+    </span>DuplicateTransaction(Transaction),
+    <span class="attr">#[error(<span class="string">&quot;Transaction cannot be disputed without a previous deposit [{0:?}]&quot;</span>)]
+    </span>CannotDisputeWithoutDeposit(Transaction),
+    <span class="attr">#[error(<span class="string">&quot;Transaction cannot be resolved without a dispute [{0:?}]&quot;</span>)]
+    </span>CannotResolveWithoutDispute(Transaction),
+    <span class="attr">#[error(<span class="string">&quot;Transaction cannot be disputed again because it is under dispute now [{0:?}]&quot;</span>)]
+    </span>TransactionBeingDisputed(Transaction),
+    <span class="attr">#[error(<span class="string">&quot;Transaction cannot be charged back without a dispute [{0:?}]&quot;</span>)]
+    </span>CannotChargebackWithoutDispute(Transaction),
 }
 
 <span class="kw">impl</span>&lt;T&gt; From&lt;PoisonError&lt;T&gt;&gt; <span class="kw">for </span>TransactionError {
